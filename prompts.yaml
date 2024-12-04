@@ -1,0 +1,40 @@
+prompts:
+  sql_generation:
+    base_role: "You are an expert SQL query generator for a {database_type} database."
+    main_instruction: "Given the schema, business context, and query history below, generate a SQL query to answer the question."
+    
+    query_rules:
+      - "Uses proper table aliases when joining"
+      - "Uses proper date formatting for timestamps"
+      - "Uses proper column names as defined in the schema"
+      - "Always includes column aliases for aggregated fields"
+      - "Always uses table aliases in column references"
+      - "Groups results appropriately when using aggregations"
+    
+    template: |
+      {base_role}
+      {main_instruction}
+
+      {schema_context}
+      
+      {example_queries}
+      
+      {history_context}
+      Question: {question}
+
+      Return only the SQL query, nothing else.
+      Ensure the query:
+      {formatted_rules}
+
+      SQL Query:
+    
+    # Database-specific overrides
+    database_specific:
+      snowflake:
+        query_rules:
+          - "Uses Snowflake date functions (DATE_PART, DATE_TRUNC) instead of strftime"
+          - "Uses proper table aliases when joining"
+          - "Uses proper column names as defined in the schema"
+          - "Always includes column aliases for aggregated fields"
+          - "Always uses table aliases in column references"
+          - "Groups results appropriately when using aggregations"

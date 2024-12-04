@@ -1,0 +1,14 @@
+streamlit==1.29.0
+langchain
+langchain-openai
+langchain-core
+langchain-community
+openai>=1.6.1
+pandas
+pyyaml==6.0.1
+python-dotenv==1.0.0
+snowflake-connector-python==3.12.3
+snowflake-sqlalchemy==1.5.1
+sqlalchemy==1.4.49
+sqlparse==0.4.4
+numpy
