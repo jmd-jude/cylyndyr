@@ -4,7 +4,6 @@ import json
 from typing import Optional, Dict, Any
 from sqlalchemy.exc import IntegrityError
 from src.database.db_manager import get_database_manager
-from src.database.inspectors import InspectorFactory
 
 class SchemaEditorUI:
     """Schema editor UI component."""
@@ -20,27 +19,22 @@ class SchemaEditorUI:
             st.session_state.active_connection_name = None
         if 'selected_table' not in st.session_state:
             st.session_state.selected_table = None
-        if 'selected_db_type' not in st.session_state:
-            st.session_state.selected_db_type = None
 
     def create_initial_schema_config(self, connection_id: str, connection_config: Dict) -> bool:
         """Create initial schema configuration for a new connection."""
         try:
-            # Validate configuration
-            errors = InspectorFactory.validate_config(connection_config)
-            if errors:
-                st.error("Invalid connection configuration:")
-                for error in errors:
-                    st.error(f"- {error}")
-                return False
-            
-            # Create appropriate inspector
-            inspector = InspectorFactory.create_inspector(connection_config)
-            
-            # Get schema information
-            schema_info = inspector.inspect_schema()
-            
-            # Save schema configuration
+            # Basic schema info for new connection
+            schema_info = {
+                "base_schema": {"tables": {}},
+                "business_context": {
+                    "description": "",
+                    "key_concepts": [],
+                    "table_descriptions": {}
+                },
+                "query_guidelines": {
+                    "optimization_rules": []
+                }
+            }
             return self.db_manager.update_schema_config(connection_id, schema_info)
         except Exception as e:
             st.error(f"Error creating schema configuration: {str(e)}")
@@ -49,88 +43,58 @@ class SchemaEditorUI:
     def render_add_connection(self):
         """Render the add connection form."""
         with st.expander("➕ Add New Connection"):
-            # Get supported database types
-            db_types = InspectorFactory.get_supported_types()
-            
-            # Database type selection (outside form)
-            db_type = st.selectbox(
-                "Database Type",
-                ["Select type..."] + db_types,
-                key="db_type_selector"
-            )
-            
-            # Show connection form only if database type is selected
-            if db_type != "Select type...":
-                st.session_state.selected_db_type = db_type
+            # Connection form
+            with st.form("add_connection_form"):
+                conn_name = st.text_input("Connection Name")
+                account = st.text_input("Account")
+                username = st.text_input("Username")
+                password = st.text_input("Password", type="password")
+                warehouse = st.text_input("Warehouse")
+                database = st.text_input("Database")
+                schema = st.text_input("Schema")
                 
-                # Connection form
-                with st.form("add_connection_form"):
-                    conn_name = st.text_input("Connection Name")
-                    
-                    # Get required parameters for selected database type
-                    required_params = InspectorFactory.get_required_params(db_type)
-                    
-                    # Initialize config
-                    config = {"type": db_type}
-                    
-                    # Create input fields for required parameters
-                    for param in required_params:
-                        if param == "password":
-                            value = st.text_input(
-                                param.title(),
-                                type="password",
-                                key=f"param_{param}"
-                            )
-                        else:
-                            value = st.text_input(
-                                param.title(),
-                                key=f"param_{param}"
-                            )
-                        if value:
-                            config[param] = value
-                    
-                    # Submit button
-                    submitted = st.form_submit_button("Add Connection")
-                    if submitted:
-                        if not conn_name:
-                            st.warning("Please enter a connection name")
-                            return
-                            
-                        # Validate configuration
-                        errors = InspectorFactory.validate_config(config)
-                        if errors:
-                            st.error("Please fill in all required fields:")
-                            for error in errors:
-                                st.error(f"- {error}")
-                            return
+                # Submit button
+                submitted = st.form_submit_button("Add Connection")
+                if submitted:
+                    if not all([conn_name, account, username, password, warehouse, database, schema]):
+                        st.warning("Please fill in all fields")
+                        return
                         
-                        # Add connection
-                        with st.spinner("Creating connection and inspecting schema..."):
-                            try:
-                                connection_id = self.db_manager.add_connection(
-                                    st.session_state.user_id,
-                                    conn_name,
-                                    db_type,
-                                    json.dumps(config)
-                                )
-                                
-                                if connection_id:
-                                    if self.create_initial_schema_config(connection_id, config):
-                                        st.success(f"Connection '{conn_name}' added successfully!")
-                                        st.session_state.active_connection_id = connection_id
-                                        st.session_state.active_connection_name = conn_name
-                                        st.session_state.selected_table = None
-                                        st.rerun()
-                                    else:
-                                        st.error("Failed to create schema configuration")
+                    # Add connection
+                    with st.spinner("Creating connection..."):
+                        try:
+                            config = {
+                                "type": "snowflake",
+                                "account": account,
+                                "username": username,
+                                "password": password,
+                                "warehouse": warehouse,
+                                "database": database,
+                                "schema": schema
+                            }
+                            
+                            connection_id = self.db_manager.add_connection(
+                                st.session_state.user_id,
+                                conn_name,
+                                "snowflake",
+                                json.dumps(config)
+                            )
+                            
+                            if connection_id:
+                                if self.create_initial_schema_config(connection_id, config):
+                                    st.success(f"Connection '{conn_name}' added successfully!")
+                                    st.session_state.active_connection_id = connection_id
+                                    st.session_state.active_connection_name = conn_name
+                                    st.session_state.selected_table = None
+                                    st.rerun()
                                 else:
-                                    st.error("Failed to add connection")
-                            except IntegrityError:
-                                st.error(f"Connection name '{conn_name}' already exists. Please choose a different name.")
-                            except Exception as e:
-                                st.error(f"Failed to add connection: {str(e)}")
-            else:
-                st.info("Please select a database type")
+                                    st.error("Failed to create schema configuration")
+                            else:
+                                st.error("Failed to add connection")
+                        except IntegrityError:
+                            st.error(f"Connection name '{conn_name}' already exists. Please choose a different name.")
+                        except Exception as e:
+                            st.error(f"Failed to add connection: {str(e)}")
 
     def render_connection_selector(self):
         """Render the connection selector dropdown."""
@@ -204,21 +168,6 @@ class SchemaEditorUI:
         if new_tips_list != query_guidelines.get("optimization_rules", []):
             query_guidelines["optimization_rules"] = new_tips_list
             save_callback()
-        
-        # Database-specific guidelines
-        if "warehouse_optimization" in query_guidelines:
-            st.write("Warehouse Optimization")
-            sizing_rules = "\n".join(query_guidelines["warehouse_optimization"].get("sizing_rules", []))
-            new_sizing = st.text_area(
-                "Sizing Rules",
-                value=sizing_rules,
-                help="Enter each warehouse sizing rule on a new line"
-            )
-            
-            new_sizing_list = [s.strip() for s in new_sizing.split("\n") if s.strip()]
-            if new_sizing_list != query_guidelines["warehouse_optimization"].get("sizing_rules", []):
-                query_guidelines["warehouse_optimization"]["sizing_rules"] = new_sizing_list
-                save_callback()
 
     def render_table_descriptions(self, config: Dict[str, Any], save_callback):
         """Render table descriptions section."""
@@ -304,7 +253,7 @@ class SchemaEditorUI:
         
         schema_config = self.db_manager.get_schema_config(st.session_state.active_connection_id)
         if not schema_config:
-            st.warning("No schema configuration found. Please refresh the connection.")
+            st.warning("No schema configuration found.")
             return
         
         config = schema_config.get('config', {})
