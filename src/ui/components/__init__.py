@@ -1,1 +1,1 @@
-"""UI Components for the Cylyndyr application."""
+"""UI components package for Cylyndyr."""

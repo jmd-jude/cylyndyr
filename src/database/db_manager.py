@@ -1,108 +1,88 @@
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.exc import SQLAlchemyError
-from datetime import datetime
+"""Database manager for handling all database operations."""
+import os
 import json
-import yaml
-from typing import Optional, List, Dict, Any
+import logging
+import streamlit as st
+from datetime import datetime
+from typing import Optional, Dict, List, Any
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from .models import Base, User, Connection, SchemaConfig
 
-from src.database.models import init_db, User, Connection, SchemaConfig
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@st.cache_resource
+def get_database_manager():
+    """Get or create DatabaseManager instance."""
+    return DatabaseManager()
 
 class DatabaseManager:
-    def __init__(self, db_url='sqlite:///cylyndyr.db'):
-        """Initialize database manager with connection to SQLite database."""
-        self.engine = init_db(db_url)
+    """Database manager class."""
+    def __init__(self):
+        """Initialize database manager."""
+        url = os.getenv('DATABASE_URL', 'sqlite:///cylyndyr.db')
+        logger.info(f"Initializing DatabaseManager with URL: {url}")
+        self.engine = create_engine(url)
+        Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine)
 
-    def create_user(self, email: str, name: str) -> Optional[str]:
-        """Create a new user and return their ID."""
+    def add_user(self, username: str, password_hash: str) -> Optional[str]:
+        """Add new user to database."""
         session = self.Session()
         try:
-            user = User(email=email, name=name)
+            logger.info(f"Adding new user: {username}")
+            user = User(email=username, password_hash=password_hash)
             session.add(user)
             session.commit()
+            logger.info(f"User added successfully with ID: {user.id}")
             return user.id
-        except SQLAlchemyError as e:
+        except Exception as e:
+            logger.error(f"Error adding user: {str(e)}")
             session.rollback()
-            raise e
-        finally:
-            session.close()
-
-    def get_user(self, user_id: str) -> Optional[Dict]:
-        """Get user details by ID."""
-        session = self.Session()
-        try:
-            user = session.query(User).filter(User.id == user_id).first()
-            if user:
-                return {
-                    'id': user.id,
-                    'email': user.email,
-                    'name': user.name,
-                    'created_at': user.created_at,
-                    'last_login': user.last_login
-                }
             return None
         finally:
             session.close()
 
-    def get_user_by_email(self, email: str) -> Optional[Dict]:
-        """Get user details by email."""
+    def get_user(self, username: str) -> Optional[Dict]:
+        """Get user by username."""
         session = self.Session()
         try:
-            user = session.query(User).filter(User.email == email).first()
+            logger.info(f"Getting user: {username}")
+            user = session.query(User).filter(User.email == username).first()
             if user:
+                logger.info(f"User found with ID: {user.id}")
                 return {
                     'id': user.id,
-                    'email': user.email,
-                    'name': user.name,
-                    'created_at': user.created_at,
-                    'last_login': user.last_login
+                    'username': user.email,
+                    'password_hash': user.password_hash
                 }
+            logger.info("User not found")
             return None
         finally:
             session.close()
 
-    def create_connection(self, user_id: str, name: str, conn_type: str, config: Dict) -> Optional[str]:
-        """Create a new connection for a user."""
+    def add_connection(self, user_id: str, name: str, type_: str, config: str) -> Optional[str]:
+        """Add new connection to database."""
         session = self.Session()
         try:
+            logger.info(f"Adding connection for user {user_id}: {name}")
             connection = Connection(
                 user_id=user_id,
                 name=name,
-                type=conn_type,
-                config=config
+                type=type_,
+                config=json.loads(config),
+                last_used=datetime.utcnow()
             )
             session.add(connection)
             session.commit()
+            logger.info(f"Connection added with ID: {connection.id}")
             return connection.id
-        except SQLAlchemyError as e:
+        except Exception as e:
+            logger.error(f"Error adding connection: {str(e)}")
             session.rollback()
-            raise e
-        finally:
-            session.close()
-
-    def delete_connection(self, connection_id: str) -> bool:
-        """Delete a connection and its associated schema config."""
-        session = self.Session()
-        try:
-            # Delete associated schema config first
-            schema_config = session.query(SchemaConfig).filter(
-                SchemaConfig.connection_id == connection_id
-            ).first()
-            if schema_config:
-                session.delete(schema_config)
-
-            # Delete the connection
-            connection = session.query(Connection).filter(
-                Connection.id == connection_id
-            ).first()
-            if connection:
-                session.delete(connection)
-                session.commit()
-                return True
-            return False
-        except SQLAlchemyError as e:
-            session.rollback()
-            raise e
+            return None
         finally:
             session.close()
 
@@ -110,73 +90,71 @@ class DatabaseManager:
         """Get all connections for a user."""
         session = self.Session()
         try:
+            logger.info(f"Getting connections for user: {user_id}")
             connections = session.query(Connection).filter(Connection.user_id == user_id).all()
+            logger.info(f"Found {len(connections)} connections")
             return [{
                 'id': conn.id,
                 'name': conn.name,
                 'type': conn.type,
-                'config': conn.config,
-                'created_at': conn.created_at,
-                'last_used': conn.last_used
+                'config': conn.config
             } for conn in connections]
         finally:
             session.close()
 
     def get_connection(self, connection_id: str) -> Optional[Dict]:
-        """Get connection details by ID."""
+        """Get connection by ID."""
         session = self.Session()
         try:
-            conn = session.query(Connection).filter(Connection.id == connection_id).first()
-            if conn:
+            logger.info(f"Getting connection: {connection_id}")
+            connection = session.query(Connection).filter(Connection.id == connection_id).first()
+            if connection:
+                logger.info("Connection found")
                 return {
-                    'id': conn.id,
-                    'user_id': conn.user_id,
-                    'name': conn.name,
-                    'type': conn.type,
-                    'config': conn.config,
-                    'created_at': conn.created_at,
-                    'last_used': conn.last_used
+                    'id': connection.id,
+                    'name': connection.name,
+                    'type': connection.type,
+                    'config': connection.config
                 }
+            logger.info("Connection not found")
             return None
         finally:
             session.close()
 
-    def update_connection_last_used(self, connection_id: str):
-        """Update the last_used timestamp of a connection."""
+    def update_schema_config(self, connection_id: str, config: Dict[str, Any]) -> bool:
+        """Update schema configuration for a connection."""
         session = self.Session()
         try:
-            conn = session.query(Connection).filter(Connection.id == connection_id).first()
-            if conn:
-                conn.last_used = datetime.utcnow()
-                session.commit()
-        except SQLAlchemyError as e:
-            session.rollback()
-            raise e
-        finally:
-            session.close()
-
-    def create_schema_config(self, connection_id: str, user_id: str, config: Dict) -> Optional[str]:
-        """Create a new schema configuration."""
-        session = self.Session()
-        try:
-            # Delete any existing schema config for this connection
-            existing_config = session.query(SchemaConfig).filter(
+            logger.info(f"Updating schema config for connection: {connection_id}")
+            connection = session.query(Connection).filter(Connection.id == connection_id).first()
+            if not connection:
+                logger.error("Connection not found")
+                return False
+                
+            schema_config = session.query(SchemaConfig).filter(
                 SchemaConfig.connection_id == connection_id
             ).first()
-            if existing_config:
-                session.delete(existing_config)
-
-            schema_config = SchemaConfig(
-                connection_id=connection_id,
-                user_id=user_id,
-                config=config
-            )
-            session.add(schema_config)
+            
+            if schema_config:
+                logger.info("Updating existing schema config")
+                schema_config.config = config
+                schema_config.last_modified = datetime.utcnow()
+            else:
+                logger.info("Creating new schema config")
+                schema_config = SchemaConfig(
+                    connection_id=connection_id,
+                    user_id=connection.user_id,
+                    config=config
+                )
+                session.add(schema_config)
+            
             session.commit()
-            return schema_config.id
-        except SQLAlchemyError as e:
+            logger.info("Schema config updated successfully")
+            return True
+        except Exception as e:
+            logger.error(f"Error updating schema config: {str(e)}")
             session.rollback()
-            raise e
+            return False
         finally:
             session.close()
 
@@ -184,50 +162,18 @@ class DatabaseManager:
         """Get schema configuration for a connection."""
         session = self.Session()
         try:
-            config = session.query(SchemaConfig).filter(
+            logger.info(f"Getting schema config for connection: {connection_id}")
+            schema_config = session.query(SchemaConfig).filter(
                 SchemaConfig.connection_id == connection_id
             ).first()
-            if config:
+            
+            if schema_config:
+                logger.info("Schema config found")
                 return {
-                    'id': config.id,
-                    'connection_id': config.connection_id,
-                    'user_id': config.user_id,
-                    'config': config.config,
-                    'last_modified': config.last_modified,
-                    'created_at': config.created_at
+                    'id': schema_config.id,
+                    'config': schema_config.config
                 }
+            logger.info("Schema config not found")
             return None
         finally:
             session.close()
-
-    def update_schema_config(self, config_id: str, new_config: Dict) -> bool:
-        """Update an existing schema configuration."""
-        session = self.Session()
-        try:
-            config = session.query(SchemaConfig).filter(SchemaConfig.id == config_id).first()
-            if config:
-                config.config = new_config
-                session.commit()
-                return True
-            return False
-        except SQLAlchemyError as e:
-            session.rollback()
-            raise e
-        finally:
-            session.close()
-
-    def migrate_existing_config(self, user_id: str, connection_id: str, config_path: str):
-        """Migrate existing YAML config to the database."""
-        try:
-            with open(config_path, 'r') as f:
-                config_data = yaml.safe_load(f)
-            
-            self.create_schema_config(
-                connection_id=connection_id,
-                user_id=user_id,
-                config=config_data
-            )
-            return True
-        except Exception as e:
-            print(f"Error migrating config: {str(e)}")
-            return False

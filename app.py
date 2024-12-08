@@ -1,181 +1,149 @@
-import streamlit as st
-# Must be the first Streamlit command
-st.set_page_config(initial_sidebar_state="collapsed")
-
-import os
+"""Main application entry point."""
 from dotenv import load_dotenv
+load_dotenv()  # Load environment variables first
+
+import streamlit as st
 import uuid
-
-# Add the project root to Python path
-from pathlib import Path
-import sys
-project_root = Path(__file__).parent
-sys.path.append(str(project_root))
-
-# Import managers
-from src.schema_manager import SchemaManager
-from src.database.connection_manager import ConnectionManager
-from src.database.db_manager import DatabaseManager
-
-# Import UI components
-from src.ui.components.connection_manager import ConnectionManagerUI
+from datetime import datetime
+import pandas as pd
 from src.ui.components.chat_interface import ChatInterfaceUI
 from src.ui.components.schema_editor import SchemaEditorUI
+from src.ui.components.login import LoginUI
+from src.database.db_manager import DatabaseManager
+from src.langchain_components.qa_chain import get_openai_client
 
-# Load environment variables - only in local development
-if os.path.exists(".env"):
-    load_dotenv(override=True)
-
-# Feature flags
-SHOW_SCHEMA_EDITOR = True
-MULTI_CONNECTION_ENABLED = True
-
-# Initialize managers
-schema_manager = SchemaManager()
-connection_manager = ConnectionManager()
-db_manager = DatabaseManager()
-
-# Initialize UI components
-connection_manager_ui = ConnectionManagerUI(connection_manager, db_manager)
-chat_interface = ChatInterfaceUI(db_manager)
-schema_editor = SchemaEditorUI(schema_manager)
+# Configure Streamlit page
+st.set_page_config(
+    page_title="Cylyndyr",
+    page_icon="🔍",
+    layout="wide"
+)
 
 def initialize_session_state():
-    """Initialize or update session state variables."""
+    """Initialize all required session state variables."""
     if 'session_id' not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
-    
     if 'user_id' not in st.session_state:
-        # For now, create or get the default user
-        try:
-            default_user = db_manager.get_user_by_email("default@cylyndyr.com")
-            if not default_user:
-                user_id = db_manager.create_user(
-                    email="default@cylyndyr.com",
-                    name="Default User"
-                )
-            else:
-                user_id = default_user['id']
-            st.session_state.user_id = user_id
-        except Exception as e:
-            st.error(f"Error initializing user: {str(e)}")
-            st.stop()
-    
+        st.session_state.user_id = None
+    if 'username' not in st.session_state:
+        st.session_state.username = None
+    if 'show_success' not in st.session_state:
+        st.session_state.show_success = False
     if 'active_connection_id' not in st.session_state:
-        # Try to get or create default connection
-        try:
-            connections = db_manager.get_user_connections(st.session_state.user_id)
-            if not connections:
-                # Migrate existing connection
-                connection_id = connection_manager.migrate_existing_connection()
-                if not connection_id:
-                    st.error("Failed to create default connection")
-                    st.stop()
-                st.session_state.active_connection_id = connection_id
-            else:
-                st.session_state.active_connection_id = connections[0]['id']
-        except Exception as e:
-            st.error(f"Error initializing connection: {str(e)}")
-            st.stop()
+        st.session_state.active_connection_id = None
+    if 'active_connection_name' not in st.session_state:
+        st.session_state.active_connection_name = None
+    if 'current_results' not in st.session_state:
+        st.session_state.current_results = None
+    if 'current_question' not in st.session_state:
+        st.session_state.current_question = None
 
-def check_api_key():
-    """Check if OpenAI API key is configured."""
-    try:
-        api_key = st.secrets.openai.api_key
-    except Exception:
-        api_key = os.getenv("OPENAI_API_KEY")
+def generate_result_narrative(df: pd.DataFrame, question: str) -> str:
+    """Generate a narrative analysis of the query results."""
+    prompt = f"""
+    Analyze this query result and provide a brief, business-focused summary.
+    Question: {question}
+    Data Summary: {df.describe().to_string()}
+    Row Count: {len(df)}
+    Column Names: {', '.join(df.columns)}
     
-    if not api_key:
-        st.error("OpenAI API key not found. Please set the OPENAI_API_KEY in environment variables or Streamlit secrets.")
-        st.stop()
-
-def check_active_connection():
-    """Check if active connection is valid."""
-    if not st.session_state.active_connection_id:
-        st.error("No active connection found.")
-        st.stop()
+    Focus on:
+    1. Key insights and patterns
+    2. Business implications
+    3. Notable trends or anomalies
     
-    if not connection_manager.test_connection(st.session_state.active_connection_id):
-        st.error("Could not connect to database. Please check your connection settings.")
-        st.stop()
+    Keep response clear and concise, under 3-4 sentences.
+    """
+    
+    llm = get_openai_client()
+    response = llm.invoke([{"role": "user", "content": prompt}])
+    return response.content
 
-def load_schema_config(has_key):
-    """Load schema config if Cylyndyr Key is enabled."""
-    if has_key == "Yes":
-        try:
-            schema_config = db_manager.get_schema_config(st.session_state.active_connection_id)
-            return schema_config['config'] if schema_config else None
-        except Exception as e:
-            st.error(f"Error loading schema config: {str(e)}")
-            st.stop()
-    return None
+def render_sidebar(login_ui: LoginUI, schema_editor: SchemaEditorUI, chat_interface: ChatInterfaceUI):
+    """Render sidebar with user info and connection management."""
+    with st.sidebar:
+        # User section
+        st.write(f"👤 Logged in as: {st.session_state.username}")
+        if st.button("🚪 Logout", type="secondary"):
+            login_ui.logout()
+            
+        st.divider()
+        
+        # Connection management section
+        st.subheader("Connection Management")
+        
+        # Active connection info
+        if st.session_state.get('active_connection_id'):
+            st.info(f"Active: {st.session_state.get('active_connection_name', 'Unknown')}")
+        
+        # Add new connection dropdown
+        schema_editor.render_add_connection()
+        
+        st.divider()
+        
+        # Existing connections dropdown
+        st.subheader("Existing Connections")
+        schema_editor.render_connection_selector()
+        
+        # Schema editor section
+        if st.session_state.get('active_connection_id'):
+            st.divider()
+            st.subheader("Schema Configuration")
+            schema_editor.render()
+            
+            # Chat history
+            st.divider()
+            chat_interface.render_history()
 
 def main():
+    """Main application entry point."""
     # Initialize session state
     initialize_session_state()
     
+    # Initialize components
+    login_ui = LoginUI()
+    
+    # Check if user is logged in
+    if not login_ui.is_logged_in():
+        login_ui.render_login()
+        return
+    
+    # Initialize other components only after login
+    db_manager = DatabaseManager()
+    chat_interface = ChatInterfaceUI(db_manager)
+    schema_editor = SchemaEditorUI(db_manager)
+    
+    # Render sidebar with connection management and history
+    render_sidebar(login_ui, schema_editor, chat_interface)
+    
+    # Main content area
     st.title("Talk to Your Data")
     
-    # Check OpenAI API key
-    check_api_key()
+    # Show connection required message if no active connection
+    if not st.session_state.get('active_connection_id'):
+        st.warning("👈 Please select or add a connection in the sidebar to get started.")
+        return
     
-    # Check active connection
-    check_active_connection()
+    # Main app layout when connection is active
+    st.subheader("Ask Questions, Get Answers")
     
-    # Sidebar Configuration
-    with st.sidebar:
-        has_key = st.radio(
-            "Cylyndyr Key",
-            ["Yes", "No"],
-            help="Experience the difference with Cylyndyr"
-        )
-        
-        st.markdown("---")
-        
-        # Connection management
-        if MULTI_CONNECTION_ENABLED:
-            connection_manager_ui.render_connection_selector()
-            connection_manager_ui.render_manager()
-            st.markdown("---")
-        
-        # INFO SECTION
-        with st.expander("Notes", expanded=False):
-            st.markdown("""
-               **Simple Questions:**
-                - How many customers do we have?
-                - What's the total value of all orders?
-
-                **Intermediate Questions:**
-                - What's the average order value by region?
-                - Show order trends over time by region
-
-                **Complex Questions:**
-                - What's the average delivery time by product category?
-                - Show me customer order patterns across different regions
-               """)
-        
-        st.markdown("---")
-        
-        # Chat history
-        with st.expander("Recent Questions", expanded=False):
-            chat_interface.display_chat_history()
+    # Display chat interface
+    user_input = st.chat_input("Ask a question about your data...")
+    if user_input:
+        results = chat_interface.handle_user_input(user_input)
+        if isinstance(results, pd.DataFrame):
+            st.session_state.current_results = results
+            st.session_state.current_question = user_input
     
-    # Load schema configuration based on Cylyndyr Key
-    config = load_schema_config(has_key)
-    
-    # Schema editor in sidebar (only if enabled)
-    if SHOW_SCHEMA_EDITOR and config:
-        schema_editor.render_editor(config, st.session_state.active_connection_id)
-    
-    # Main query interface
-    st.header("Ask Questions, Get Answers")
-    
-    # Query input using chat_input
-    if question := st.chat_input("Ask a question about your data..."):
-        chat_interface.handle_user_input(question)
-    
-    # Handle analysis of previous results when button is clicked
-    chat_interface.handle_analysis_request()
+    # Add analyze button for current results
+    if st.session_state.current_results is not None:
+        if st.button("📊 Analyze This Result", key="analyze_button"):
+            with st.spinner("Analyzing..."):
+                narrative = generate_result_narrative(
+                    st.session_state.current_results,
+                    st.session_state.current_question
+                )
+                st.info(narrative)
 
 if __name__ == "__main__":
     main()

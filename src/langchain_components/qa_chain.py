@@ -1,3 +1,4 @@
+"""Query generation and execution components."""
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 import pandas as pd
@@ -11,6 +12,8 @@ import json
 import snowflake.connector
 from dotenv import load_dotenv
 import sqlparse
+import streamlit as st
+from src.database.db_manager import DatabaseManager
 
 # Load environment variables
 load_dotenv(override=True)
@@ -35,10 +38,6 @@ def get_openai_client():
     if not api_key:
         raise ValueError("OpenAI API key not found in environment variables")
     
-    logging.info(f"API Key found: {bool(api_key)}")
-    logging.info(f"API Key length: {len(api_key)}")
-    logging.info(f"API Key prefix: {api_key[:7]}...")
-    
     return ChatOpenAI(
         api_key=api_key,
         model="gpt-3.5-turbo",
@@ -46,14 +45,24 @@ def get_openai_client():
     )
 
 def get_snowflake_connection():
-    """Create and return a Snowflake connection."""
+    """Create and return a Snowflake connection using active connection config."""
+    # Get active connection config from DatabaseManager
+    db_manager = DatabaseManager()
+    active_conn = db_manager.get_connection(st.session_state.active_connection_id)
+    
+    if not active_conn:
+        raise ValueError("No active connection found")
+    
+    # Use connection's stored config
+    conn_config = active_conn['config']
+    
     return snowflake.connector.connect(
-        account=os.getenv('SNOWFLAKE_ACCOUNT'),
-        user=os.getenv('SNOWFLAKE_USER'),
-        password=os.getenv('SNOWFLAKE_PASSWORD'),
-        database=os.getenv('SNOWFLAKE_DATABASE'),
-        warehouse=os.getenv('SNOWFLAKE_WAREHOUSE'),
-        schema=os.getenv('SNOWFLAKE_SCHEMA')
+        account=conn_config['account'],
+        user=conn_config['username'],
+        password=conn_config['password'],
+        database=conn_config['database'],
+        warehouse=conn_config['warehouse'],
+        schema=conn_config['schema']
     )
 
 class QueryMemoryManager:
@@ -71,10 +80,9 @@ class QueryMemoryManager:
         if isinstance(result, pd.DataFrame):
             if result.empty:
                 return "Empty DataFrame"
-            # Format DataFrame with clean spacing and alignment
             return result.to_string(
                 index=False,
-                max_rows=10,  # Limit rows for readability
+                max_rows=10,
                 max_cols=None,
                 line_width=80,
                 justify='left'
@@ -108,34 +116,60 @@ def format_schema_context(config):
     if not config:
         return ""
         
-    context = [f"Business Context: {config['business_context']['description']}"]
+    context = []
     
-    concepts = "\n".join(f"- {c}" for c in config['business_context']['key_concepts'])
-    context.append(f"Key Business Concepts:\n{concepts}")
-    
-    for table_name, table_info in config['tables'].items():
-        context.append(f"\nTable: {table_name}")
-        context.append(f"Description: {table_info['description']}")
+    # Add business context
+    if 'business_context' in config:
+        context.append(f"Business Context: {config['business_context'].get('description', '')}")
         
-        fields = []
-        for field_name, field_info in table_info['fields'].items():
-            field_desc = f"- {field_name} ({field_info['type']}): {field_info['description']}"
-            if field_info.get('is_key'):
-                field_desc += " (Primary Key)"
-            if field_info.get('foreign_key'):
-                field_desc += f" (Foreign Key -> {field_info['foreign_key']})"
-            fields.append(field_desc)
-        context.append("Fields:\n" + "\n".join(fields))
-        
-        if 'relationships' in table_info:
-            rels = []
-            for rel in table_info['relationships']:
-                rels.append(f"- {rel['type']} relationship with {rel['table']} on {rel['join_fields']}")
-            context.append("Relationships:\n" + "\n".join(rels))
+        concepts = config['business_context'].get('key_concepts', [])
+        if concepts:
+            concepts_text = "\n".join(f"- {c}" for c in concepts)
+            context.append(f"Key Business Concepts:\n{concepts_text}")
     
-    if config.get('query_guidelines'):
-        tips = "\n".join(f"- {tip}" for tip in config['query_guidelines']['tips'])
-        context.append(f"\nQuery Guidelines:\n{tips}")
+    # Process tables from base_schema
+    if 'base_schema' in config and 'tables' in config['base_schema']:
+        for table_name, table_info in config['base_schema']['tables'].items():
+            context.append(f"\nTable: {table_name}")
+            
+            # Get table description from business context
+            table_desc = config.get('business_context', {}).get('table_descriptions', {}).get(table_name, {}).get('description', '')
+            if table_desc:
+                context.append(f"Description: {table_desc}")
+            
+            # Process fields
+            fields = []
+            for field_name, field_info in table_info.get('fields', {}).items():
+                field_desc = f"- {field_name} ({field_info['type']})"
+                
+                # Get field description from business context
+                field_business_desc = (config.get('business_context', {})
+                                     .get('table_descriptions', {})
+                                     .get(table_name, {})
+                                     .get('fields', {})
+                                     .get(field_name, {})
+                                     .get('description', ''))
+                if field_business_desc:
+                    field_desc += f": {field_business_desc}"
+                
+                if field_info.get('primary_key'):
+                    field_desc += " (Primary Key)"
+                if field_info.get('foreign_key'):
+                    field_desc += " (Foreign Key)"
+                if not field_info.get('nullable', True):
+                    field_desc += " (Required)"
+                
+                fields.append(field_desc)
+            
+            if fields:
+                context.append("Fields:\n" + "\n".join(fields))
+    
+    # Add query guidelines
+    if 'query_guidelines' in config:
+        guidelines = config['query_guidelines']
+        if 'optimization_rules' in guidelines:
+            rules = "\n".join(f"- {rule}" for rule in guidelines['optimization_rules'])
+            context.append(f"\nQuery Optimization Rules:\n{rules}")
     
     return "\n\n".join(context)
 
@@ -157,15 +191,13 @@ def format_example_queries(config):
 
 def sanitize_sql(query):
     """Sanitize SQL query using sqlparse for better reliability."""
-    # Remove SQL code blocks if present
     query = re.sub(r'```sql|```', '', query)
     
-    # Format the SQL properly using sqlparse
     formatted = sqlparse.format(
         query,
         reindent=True,
         keyword_case='upper',
-        identifier_case='upper',  # Snowflake uses uppercase
+        identifier_case='upper',
         strip_comments=True,
         use_space_around_operators=True
     )
@@ -196,7 +228,6 @@ def get_data_timeframe():
 def create_sql_generation_prompt(chat_history=None, config=None):
     """Create prompt template using configuration from YAML."""
     if not config:
-        # Basic template without any schema context or helpful rules
         prompt_text = """
         Generate a SQL query to answer this question. The database contains tables about customers, orders, and products.
         
@@ -206,7 +237,6 @@ def create_sql_generation_prompt(chat_history=None, config=None):
         """
         return ChatPromptTemplate.from_template(prompt_text)
     
-    # Full featured template with all context and rules
     prompt_config = load_prompt_config()
     min_date, max_date = get_data_timeframe()
     
@@ -215,19 +245,16 @@ def create_sql_generation_prompt(chat_history=None, config=None):
     
     prompt_config['query_rules'].extend([
         "Use UPPERCASE for table and column names",
-        "Table names in TPC-H are: CUSTOMER, ORDERS, LINEITEM, PART, PARTSUPP, SUPPLIER, NATION, REGION",
-        "Always use the exact column names from the schema (e.g., C_CUSTKEY, O_ORDERKEY)",
+        "Always use the exact column names from the schema",
         "Use Snowflake date functions (e.g., DATE_TRUNC, DATE_PART) for date operations",
         f"Data timeframe: Orders from {min_date} to {max_date}",
         "If a query returns empty results, try to determine why and adjust the query accordingly"
     ])
     
-    # Format contexts
     formatted_rules = "\n".join(f"{i+1}. {rule}" for i, rule in enumerate(prompt_config['query_rules']))
     schema_context = format_schema_context(config)
     example_queries = format_example_queries(config)
     
-    # Format history context with emphasis on empty results
     history_context = ""
     if chat_history:
         history_entries = []
@@ -240,7 +267,6 @@ def create_sql_generation_prompt(chat_history=None, config=None):
             history_entries.append(entry)
         history_context = f"\nRecent Query History:\n" + "\n\n".join(history_entries) + "\n"
     
-    # Full template with schema context
     prompt_text = prompt_config['template'].format(
         base_role=prompt_config['base_role'].format(database_type="Snowflake"),
         main_instruction=prompt_config['main_instruction'],
@@ -248,7 +274,7 @@ def create_sql_generation_prompt(chat_history=None, config=None):
         example_queries=example_queries,
         history_context=history_context,
         formatted_rules=formatted_rules,
-        question="{question}"  # Left for ChatPromptTemplate to fill
+        question="{question}"
     )
     
     return ChatPromptTemplate.from_template(prompt_text)
@@ -293,25 +319,22 @@ def execute_dynamic_query(query: str, question: str = None, thread_id: str = "de
     """Execute generated SQL query and return results."""
     conn = None
     try:
-        # Create a new connection for each query
         conn = get_snowflake_connection()
         
-        # Execute query and fetch results into pandas DataFrame
         cursor = conn.cursor()
         cursor.execute(query)
         columns = [desc[0] for desc in cursor.description]
         data = cursor.fetchall()
         df = pd.DataFrame(data, columns=columns)
         
-        # If results are empty, try to refine the query
         if df.empty and question:
             refined_query = refine_query_if_empty(question, query, thread_id)
-            if refined_query != query:  # Only if we got a different query
+            if refined_query != query:
                 cursor.execute(refined_query)
                 columns = [desc[0] for desc in cursor.description]
                 data = cursor.fetchall()
                 df = pd.DataFrame(data, columns=columns)
-                query = refined_query  # Update query to the refined version
+                query = refined_query
         
         if question:
             memory_manager.save_interaction(thread_id, question, query, df)

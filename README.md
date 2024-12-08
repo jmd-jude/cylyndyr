@@ -1,108 +1,58 @@
 # Cylyndyr
 
-A natural language interface for your data.
+A natural language interface for querying databases, with support for multiple connections and schema management.
 
-## Multi-Connection Support
+## Setup
 
-Cylyndyr now supports multiple database connections, allowing you to:
-- Connect to multiple Snowflake databases
-- Maintain separate schema configurations per connection
-- Switch between connections easily
+### Local Development
 
-### Setup
-
-1. Initialize the database:
+1. Clone the repository:
 ```bash
-cd src/database
+git clone https://github.com/jmd-jude/cylyndyr.git
+cd cylyndyr
+```
+
+2. Create a virtual environment and install dependencies:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+3. Create a `.env` file with required environment variables:
+```
+OPENAI_API_KEY=your-key-here
+DATABASE_URL=postgresql://...  # Optional: For production database
+```
+
+4. Initialize the database:
+```bash
 python init_db.py
 ```
 
-2. Run the application:
+5. Run the application:
 ```bash
 streamlit run app.py
 ```
 
-On first run, the app will:
-- Create a SQLite database to store connection information
-- Migrate your existing Snowflake connection (from environment variables or Streamlit secrets)
-- Migrate your existing schema configuration
+### Production Deployment
 
-### Adding New Connections
+When deploying to Streamlit Cloud, set the following secrets:
 
-Once the app is running with multi-connection support enabled:
-1. Your existing Snowflake connection will be automatically migrated
-2. Additional connections can be managed through the UI
-3. Each connection maintains its own schema configuration
-
-### Environment Variables
-
-For local development, set these environment variables or use a `.env` file:
-
-```env
-# OpenAI
-OPENAI_API_KEY=your_api_key
-
-# Default Snowflake Connection
-SNOWFLAKE_ACCOUNT=your_account
-SNOWFLAKE_USER=your_user
-SNOWFLAKE_PASSWORD=your_password
-SNOWFLAKE_DATABASE=your_database
-SNOWFLAKE_WAREHOUSE=your_warehouse
-SNOWFLAKE_SCHEMA=your_schema
-```
-
-### Streamlit Cloud Deployment
-
-For Streamlit Cloud deployment, add these secrets:
-
-```toml
-[openai]
-api_key = "your_api_key"
-
-[snowflake]
-account = "your_account"
-user = "your_user"
-password = "your_password"
-database = "your_database"
-warehouse = "your_warehouse"
-schema = "your_schema"
-```
+- `OPENAI_API_KEY`: Your OpenAI API key
+- `DATABASE_URL`: PostgreSQL connection string (if using Supabase or other database)
 
 ## Features
 
 - Natural language queries to SQL
-- Schema-aware query generation
-- Customizable schema configurations
-- Multiple database connections
-- Result analysis and formatting
-- Chat history
-- Schema configuration editor
-
-## Architecture
-
-The application uses:
-- Streamlit for the user interface
-- LangChain for natural language processing
-- SQLAlchemy for database management
-- SQLite for storing connection and configuration data
-- Snowflake for data warehousing
+- Multiple database connection support
+- Schema configuration and management
+- Business context for better query understanding
+- Support for Snowflake databases
 
 ## Development
 
-To contribute or modify:
-
-1. Clone the repository
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-3. Set up environment variables
-4. Initialize the database
-5. Run the application
-
-## Notes
-
-- The application maintains backward compatibility with single-connection mode
-- Schema configurations are stored per-connection in the SQLite database
-- Connection credentials are stored securely in the SQLite database
-- Each user gets their own set of connections and configurations
+- Uses SQLite for local development
+- PostgreSQL for production
+- Streamlit for the user interface
+- LangChain for natural language processing

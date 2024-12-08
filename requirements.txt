@@ -1,14 +1,22 @@
+# Core dependencies
 streamlit==1.29.0
-langchain
-langchain-openai
-langchain-core
-langchain-community
-openai>=1.6.1
-pandas
+langchain==0.0.350
+openai==1.3.0
+snowflake-connector-python==3.5.0
+sqlalchemy>=1.4.0,<2.0.0  # Keep under 2.0 for compatibility
 pyyaml==6.0.1
-python-dotenv==1.0.0
-snowflake-connector-python==3.12.3
-snowflake-sqlalchemy==1.5.1
-sqlalchemy==1.4.49
-sqlparse==0.4.4
-numpy
+pandas==2.1.3
+
+# Database support
+psycopg2-binary==2.9.9  # PostgreSQL driver
+python-dotenv==1.0.0    # Environment variable management
+
+# Development dependencies
+black==23.11.0
+pylint==3.0.2
+pytest==7.4.3
+
+# Additional dependencies
+langchain-core==0.1.1
+langchain-community==0.0.3
+pydantic>=2.0.0
