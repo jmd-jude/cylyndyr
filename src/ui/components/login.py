@@ -1,7 +1,7 @@
 """Login UI component."""
 import streamlit as st
 import hashlib
-from typing import Optional
+from typing import Optional, Tuple
 from src.database.db_manager import get_database_manager
 
 class LoginUI:
@@ -20,14 +20,16 @@ class LoginUI:
         """Hash password using SHA-256."""
         return hashlib.sha256(password.encode()).hexdigest()
 
-    def create_user(self, email: str, password: str) -> bool:
+    def create_user(self, email: str, password: str) -> Tuple[bool, Optional[str]]:
         """Create new user in database."""
         try:
-            user_id = self.db_manager.add_user(email, self.hash_password(password))
-            return user_id is not None
+            user_id, error = self.db_manager.add_user(email, self.hash_password(password))
+            if user_id:
+                return True, None
+            return False, error or "Failed to create account"
         except Exception as e:
             print(f"Error creating user: {str(e)}")  # Debug print
-            return False
+            return False, "An unexpected error occurred"
 
     def verify_user(self, email: str, password: str) -> Optional[str]:
         """Verify user credentials and return user_id if valid."""
@@ -110,10 +112,11 @@ class LoginUI:
                         elif len(new_password) < 6:
                             st.error("Password must be at least 6 characters long")
                         else:
-                            if self.create_user(new_email, new_password):
+                            success, error = self.create_user(new_email, new_password)
+                            if success:
                                 st.success("Account created successfully! Please log in.")
                             else:
-                                st.error("Email already exists")
+                                st.error(error)
                     else:
                         st.warning("Please fill out all fields")
 

@@ -4,9 +4,11 @@ import json
 import logging
 import streamlit as st
 from datetime import datetime
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Tuple
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import IntegrityError
+from psycopg2.errors import UniqueViolation
 from .models import Base, User, Connection, SchemaConfig
 
 # Set up logging
@@ -28,8 +30,13 @@ class DatabaseManager:
         Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine)
 
-    def add_user(self, username: str, password_hash: str) -> Optional[str]:
-        """Add new user to database."""
+    def add_user(self, username: str, password_hash: str) -> Tuple[Optional[str], Optional[str]]:
+        """Add new user to database.
+        
+        Returns:
+            Tuple of (user_id, error_message). If successful, error_message is None.
+            If failed, user_id is None and error_message contains the error.
+        """
         session = self.Session()
         try:
             logger.info(f"Adding new user: {username}")
@@ -37,12 +44,18 @@ class DatabaseManager:
             session.add(user)
             session.commit()
             logger.info(f"User added successfully with ID: {user.id}")
-            return user.id
+            return user.id, None
+        except IntegrityError as e:
+            if isinstance(e.orig, UniqueViolation):
+                logger.error(f"Email already exists: {username}")
+                return None, "Email already exists"
+            logger.error(f"Database integrity error: {str(e)}")
+            return None, "Database error occurred"
         except Exception as e:
             logger.error(f"Error adding user: {str(e)}")
-            session.rollback()
-            return None
+            return None, "An unexpected error occurred"
         finally:
+            session.rollback()
             session.close()
 
     def get_user(self, username: str) -> Optional[Dict]:
