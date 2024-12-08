@@ -2,7 +2,7 @@
 import streamlit as st
 import hashlib
 from typing import Optional, Tuple
-from src.database.db_manager import get_database_manager
+from src.database.db_manager import DatabaseManager
 
 class LoginUI:
     def __init__(self):
@@ -13,8 +13,8 @@ class LoginUI:
         if 'username' not in st.session_state:
             st.session_state.username = None
             
-        # Get cached database manager
-        self.db_manager = get_database_manager()
+        # Initialize database manager
+        self.db_manager = DatabaseManager()
 
     def hash_password(self, password: str) -> str:
         """Hash password using SHA-256."""

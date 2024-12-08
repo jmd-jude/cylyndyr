@@ -3,13 +3,8 @@ import os
 from sqlalchemy import create_engine, Column, String, DateTime, ForeignKey, JSON, Table, MetaData, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.sqlite import JSON
 from datetime import datetime
 import uuid
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 Base = declarative_base()
 
@@ -64,20 +59,8 @@ class SchemaConfig(Base):
     user = relationship("User", back_populates="schema_configs")
     connection = relationship("Connection", back_populates="schema_configs")
 
-def init_db(db_url=None):
-    """Initialize the database and create all tables.
-    
-    Args:
-        db_url: Optional database URL. If not provided, uses DATABASE_URL from environment
-               or falls back to SQLite.
-    """
-    if not db_url:
-        db_url = os.getenv('DATABASE_URL', 'sqlite:///cylyndyr.db')
-    
-    # Create engine with appropriate JSON type for PostgreSQL
-    if db_url.startswith('postgresql'):
-        from sqlalchemy.dialects.postgresql import JSON
-    
+def init_db(db_url):
+    """Initialize the database and create all tables."""
     engine = create_engine(db_url)
     Base.metadata.create_all(engine)
     return engine

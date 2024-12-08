@@ -34,9 +34,10 @@ logging.basicConfig(
 
 def get_openai_client():
     """Initialize OpenAI client with API key."""
-    api_key = os.getenv("OPENAI_API_KEY")
+    # Try getting API key from Streamlit secrets first, then environment variables
+    api_key = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
     if not api_key:
-        raise ValueError("OpenAI API key not found in environment variables")
+        raise ValueError("OpenAI API key not found in environment variables or Streamlit secrets")
     
     return ChatOpenAI(
         api_key=api_key,
@@ -231,6 +232,8 @@ def create_sql_generation_prompt(chat_history=None, config=None):
         prompt_text = """
         Generate a SQL query to answer this question. The database contains tables about customers, orders, and products.
         
+        IMPORTANT: Combine multiple queries into a single query using subqueries or CTEs.
+        
         Question: {question}
         
         Return only the SQL query without any explanation.
@@ -248,7 +251,8 @@ def create_sql_generation_prompt(chat_history=None, config=None):
         "Always use the exact column names from the schema",
         "Use Snowflake date functions (e.g., DATE_TRUNC, DATE_PART) for date operations",
         f"Data timeframe: Orders from {min_date} to {max_date}",
-        "If a query returns empty results, try to determine why and adjust the query accordingly"
+        "If a query returns empty results, try to determine why and adjust the query accordingly",
+        "IMPORTANT: Combine multiple queries into a single query using subqueries or CTEs"
     ])
     
     formatted_rules = "\n".join(f"{i+1}. {rule}" for i, rule in enumerate(prompt_config['query_rules']))
@@ -291,6 +295,7 @@ def refine_query_if_empty(question: str, original_query: str, thread_id: str = "
     1. Considers the actual timeframe of the data
     2. Relaxes or adjusts any overly restrictive conditions
     3. Maintains the original intent of the question
+    4. IMPORTANT: Combine multiple queries into a single query using subqueries or CTEs
     
     Generate only the SQL query, no explanation needed.
     """

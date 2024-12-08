@@ -24,19 +24,17 @@ class DatabaseManager:
     """Database manager class."""
     def __init__(self):
         """Initialize database manager."""
-        url = os.getenv('DATABASE_URL', 'sqlite:///cylyndyr.db')
-        logger.info(f"Initializing DatabaseManager with URL: {url}")
+        url = os.getenv('DATABASE_URL')
+        if not url:
+            raise ValueError("DATABASE_URL environment variable is not set")
+            
+        logger.info(f"Initializing DatabaseManager")
         self.engine = create_engine(url)
         Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine)
 
     def add_user(self, username: str, password_hash: str) -> Tuple[Optional[str], Optional[str]]:
-        """Add new user to database.
-        
-        Returns:
-            Tuple of (user_id, error_message). If successful, error_message is None.
-            If failed, user_id is None and error_message contains the error.
-        """
+        """Add new user to database."""
         session = self.Session()
         try:
             logger.info(f"Adding new user: {username}")
