@@ -114,7 +114,7 @@ class QueryGenerator:
         if 'description' in config['business_context']:
             context.append(f"Business Context: {config['business_context']['description']}")
         
-        # Add key business concepts
+        # Add business concepts
         if 'key_concepts' in config['business_context']:
             concepts = config['business_context']['key_concepts']
             if concepts:
