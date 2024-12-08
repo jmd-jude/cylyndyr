@@ -2,12 +2,12 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from typing import Optional, Dict, Any, Union
+from typing import Union
 
 from src.langchain_components.qa_chain import (
     generate_dynamic_query,
     execute_dynamic_query,
-    memory_manager
+    query_generator
 )
 
 class ChatInterfaceUI:
@@ -16,6 +16,8 @@ class ChatInterfaceUI:
     def __init__(self, schema_editor):
         """Initialize chat interface UI component."""
         self.schema_editor = schema_editor
+        if 'chat_history' not in st.session_state:
+            st.session_state.chat_history = []
 
     def handle_user_input(self, prompt: str) -> Union[pd.DataFrame, str]:
         """Handle user input and return results."""
@@ -27,27 +29,43 @@ class ChatInterfaceUI:
             st.code(query, language='sql')
         
         with st.spinner("Executing query..."):
-            result = execute_dynamic_query(query, prompt)
+            result = execute_dynamic_query(query)
             
-        return result
+            st.session_state.chat_history.append({
+                'timestamp': datetime.now().isoformat(),
+                'question': prompt,
+                'query': query,
+                'result': result
+            })
+            
+            return result
 
     def render_sidebar(self):
         """Render the sidebar with recent queries."""
         st.subheader("Recent Questions")
         
-        history = memory_manager.get_chat_history()
-        if history:
-            for interaction in history:
+        col1, col2 = st.columns([3, 1])
+        with col2:
+            if st.button("🗑️ Clear", help="Clear conversation history"):
+                st.session_state.chat_history = []
+                st.rerun()
+        
+        if st.session_state.chat_history:
+            for interaction in reversed(st.session_state.chat_history[-7:]):
                 timestamp = datetime.fromisoformat(interaction['timestamp'])
-                with st.expander(f"{timestamp.strftime('%I:%M %p')}"):
-                    st.write(f"Q: {interaction['question']}")
+                with st.expander(f"{timestamp.strftime('%I:%M %p')} - {interaction['question'][:30]}..."):
+                    st.write("Question:")
+                    st.write(interaction['question'])
+                    st.write("SQL Query:")
+                    st.code(interaction['query'], language='sql')
                     st.write("Result:")
-                    st.code(interaction['result'])
-                    st.button("🔄 Toggle Cyl", key=f"toggle_{interaction['timestamp']}")
+                    if isinstance(interaction['result'], pd.DataFrame):
+                        st.dataframe(interaction['result'])
+                    else:
+                        st.write(interaction['result'])
         else:
             st.info("No recent questions")
             
-        # Schema editor
         with st.expander("Schema Configuration"):
             self.schema_editor.render()
 
@@ -57,25 +75,27 @@ class ChatInterfaceUI:
             st.info("Please select or add a connection to start querying")
             return
         
-        # Chat input
         if prompt := st.chat_input("Ask a question about your data..."):
             st.chat_message("user").write(prompt)
             result = self.handle_user_input(prompt)
             
+            msg = st.chat_message("assistant")
             if isinstance(result, pd.DataFrame):
-                st.chat_message("assistant").dataframe(result)
+                # Store current results for analysis
+                st.session_state.current_results = result
+                st.session_state.current_question = prompt
+                
+                msg.dataframe(result, use_container_width=True, hide_index=True)
             else:
-                st.chat_message("assistant").write(result)
+                msg.write(result)
 
     def render(self):
         """Render the main chat interface."""
         st.title("Talk to Your Data")
         
-        # Show connection required message if no active connection
         if not st.session_state.get('active_connection_id'):
             st.warning("👈 Please select or add a connection in the sidebar to get started.")
             return
         
-        # Main chat interface
         st.subheader("Ask Questions, Get Answers")
         self.render_chat()

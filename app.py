@@ -11,7 +11,7 @@ from src.ui.components.chat_interface import ChatInterfaceUI
 from src.ui.components.schema_editor import SchemaEditorUI
 from src.ui.components.login import LoginUI
 from src.database.db_manager import get_database_manager
-from src.langchain_components.qa_chain import get_openai_client
+from src.langchain_components.qa_chain import query_generator
 
 # Debug: Print environment at startup
 print("Environment variables at startup:")
@@ -43,27 +43,6 @@ def initialize_session_state():
         st.session_state.current_results = None
     if 'current_question' not in st.session_state:
         st.session_state.current_question = None
-
-def generate_result_narrative(df: pd.DataFrame, question: str) -> str:
-    """Generate a narrative analysis of the query results."""
-    prompt = f"""
-    Analyze this query result and provide a brief, business-focused summary.
-    Question: {question}
-    Data Summary: {df.describe().to_string()}
-    Row Count: {len(df)}
-    Column Names: {', '.join(df.columns)}
-    
-    Focus on:
-    1. Key insights and patterns
-    2. Business implications
-    3. Notable trends or anomalies
-    
-    Keep response clear and concise, under 3-4 sentences.
-    """
-    
-    llm = get_openai_client()
-    response = llm.invoke([{"role": "user", "content": prompt}])
-    return response.content
 
 def render_sidebar(login_ui: LoginUI, schema_editor: SchemaEditorUI, chat_interface: ChatInterfaceUI):
     """Render sidebar with user info and connection management."""
@@ -124,9 +103,11 @@ def main():
     if st.session_state.current_results is not None:
         if st.button("📊 Analyze This Result", key="analyze_button"):
             with st.spinner("Analyzing..."):
-                narrative = generate_result_narrative(
+                schema_config = schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)
+                narrative = query_generator.analyze_result(
                     st.session_state.current_results,
-                    st.session_state.current_question
+                    st.session_state.current_question,
+                    config=schema_config.get('config') if schema_config else None
                 )
                 st.info(narrative)
 

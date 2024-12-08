@@ -1,15 +1,9 @@
-# Environment and secrets
-.env
-.streamlit/secrets.toml
-*.db
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-env/
 build/
 develop-eggs/
 dist/
@@ -29,6 +23,8 @@ wheels/
 # Virtual Environment
 venv/
 ENV/
+env/
+.env
 
 # IDE
 .idea/
@@ -40,9 +36,13 @@ ENV/
 logs/
 *.log
 
-# OS
+# Local development
 .DS_Store
-Thumbs.db
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-#strategic docs
+# Project specific
+roadmap/
 /strategic_docs

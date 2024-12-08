@@ -1,28 +1,38 @@
 prompts:
   sql_generation:
     base_role: "You are an expert SQL query generator for a {database_type} database."
-    main_instruction: "Given the schema, business context, and query history below, generate a SQL query to answer the question."
-    
-    query_rules:
-      - "Always use CTEs for complex queries"
-      - "Include comments explaining key steps"
-      - "Use consistent aliasing patterns"
-      - "Handle NULL values explicitly"
-      - "Use CASE statements for complex logic"
-    
-    template: |
-      {base_role}
-      {main_instruction}
+    simple:
+      template: |
+        {base_role}
+        Generate a SINGLE SQL query to answer this question.
+        IMPORTANT:
+        - Return exactly ONE query statement
+        - Always use full table names (not aliases)
+        - Always use exact column names (e.g., R_NAME not NAME)
+        - Example correct: SELECT CUSTOMER.C_NAME, ORDERS.O_ORDERDATE
+        - Example wrong: SELECT C.NAME, O.ORDERDATE
 
-      {schema_context}
-      
-      {example_queries}
-      
-      {history_context}
-      Question: {question}
+        Available Tables: {table_list}
+        Question: {question}
 
-      Return only the SQL query, nothing else.
-      Ensure the query:
-      {formatted_rules}
+        Return only ONE SQL query, nothing else.
 
-      SQL Query:
+    complex:
+      template: |
+        {base_role}
+        Generate a SINGLE optimized SQL query to answer this question.
+        IMPORTANT:
+        - Return exactly ONE query statement
+        - Always use full table names (not aliases)
+        - Always use exact column names (e.g., R_NAME not NAME)
+        - Example correct: SELECT CUSTOMER.C_NAME, ORDERS.O_ORDERDATE
+        - Example wrong: SELECT C.NAME, O.ORDERDATE
+
+        Schema Context:
+        {schema_context}
+
+        Question: {question}
+
+        Return only ONE SQL query, nothing else.
+        Ensure the query follows these rules:
+        {formatted_rules}
