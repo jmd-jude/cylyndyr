@@ -85,15 +85,10 @@ def render_sidebar(login_ui: LoginUI, schema_editor: SchemaEditorUI, chat_interf
         st.subheader("Existing Connections")
         schema_editor.render_connection_selector()
         
-        # Schema editor section
+        # Recent queries and schema editor
         if st.session_state.get('active_connection_id'):
             st.divider()
-            st.subheader("Schema Configuration")
-            schema_editor.render()
-            
-            # Chat history
-            st.divider()
-            chat_interface.render_history()
+            chat_interface.render_sidebar()
 
 def main():
     """Main application entry point."""
@@ -110,30 +105,14 @@ def main():
     
     # Initialize other components only after login
     db_manager = DatabaseManager()
-    chat_interface = ChatInterfaceUI(db_manager)
     schema_editor = SchemaEditorUI(db_manager)
+    chat_interface = ChatInterfaceUI(schema_editor)
     
     # Render sidebar with connection management and history
     render_sidebar(login_ui, schema_editor, chat_interface)
     
     # Main content area
-    st.title("Talk to Your Data")
-    
-    # Show connection required message if no active connection
-    if not st.session_state.get('active_connection_id'):
-        st.warning("👈 Please select or add a connection in the sidebar to get started.")
-        return
-    
-    # Main app layout when connection is active
-    st.subheader("Ask Questions, Get Answers")
-    
-    # Display chat interface
-    user_input = st.chat_input("Ask a question about your data...")
-    if user_input:
-        results = chat_interface.handle_user_input(user_input)
-        if isinstance(results, pd.DataFrame):
-            st.session_state.current_results = results
-            st.session_state.current_question = user_input
+    chat_interface.render()
     
     # Add analyze button for current results
     if st.session_state.current_results is not None:

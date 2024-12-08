@@ -1,6 +1,5 @@
-"""Chat interface UI components."""
+"""Chat interface UI component."""
 import streamlit as st
-from datetime import datetime
 import pandas as pd
 from typing import Optional, Dict, Any, Union
 
@@ -9,106 +8,96 @@ from src.langchain_components.qa_chain import (
     execute_dynamic_query,
     memory_manager
 )
-from src.database.db_manager import DatabaseManager
 
 class ChatInterfaceUI:
-    def __init__(self, db_manager: DatabaseManager):
-        """Initialize chat interface UI with database manager."""
-        self.db_manager = DatabaseManager()
-
-    def handle_user_input(self, question: str) -> Union[pd.DataFrame, str]:
-        """Handle user input and generate response.
+    """Chat interface UI component."""
+    
+    def __init__(self, schema_editor):
+        """Initialize chat interface UI component."""
+        self.schema_editor = schema_editor
         
-        Returns:
-            DataFrame if query successful, error message string if failed
-        """
-        try:
-            with st.spinner("Working on it..."):
-                # Get schema config for active connection
-                config = self.get_active_schema_config()
-                if not config:
-                    st.error("No schema configuration found for the active connection.")
-                    return "No schema configuration found"
-                
-                # Generate SQL query
-                sql_query = generate_dynamic_query(question, st.session_state.session_id, config)
-                
-                # Show the generated SQL with the question context
-                with st.expander("Cylyndyr", expanded=False):
-                    st.markdown(f"**Question:** {question}")
-                    st.markdown("**Cyl:**")
-                    st.code(sql_query, language="sql")
-                
-                # Execute query and show results
-                results = execute_dynamic_query(sql_query, question, st.session_state.session_id)
-                
-                if isinstance(results, pd.DataFrame):
-                    # Display results
-                    st.dataframe(self.format_dataframe(results))
-                    return results
-                else:
-                    st.error(f"Error executing query: {results}")
-                    return f"Error executing query: {results}"
+        # Initialize session state
+        if 'chat_history' not in st.session_state:
+            st.session_state.chat_history = []
+        if 'current_thread' not in st.session_state:
+            st.session_state.current_thread = None
+
+    def handle_user_input(self, prompt: str) -> Union[pd.DataFrame, str]:
+        """Handle user input and return results."""
+        with st.spinner("Generating SQL query..."):
+            query = generate_dynamic_query(prompt)
         
-        except Exception as e:
-            st.error("An error occurred while processing your question.")
-            st.error(f"Error details: {str(e)}")
-            return f"Error: {str(e)}"
-
-    def get_active_schema_config(self) -> Optional[Dict]:
-        """Get schema config for active connection."""
-        try:
-            schema_config = self.db_manager.get_schema_config(st.session_state.active_connection_id)
-            if schema_config:
-                return schema_config['config']
-            return None
-        except Exception as e:
-            st.error(f"Error loading schema config: {str(e)}")
-            return None
-
-    def format_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Apply formatting to DataFrame."""
-        formatted_df = df.copy()
+        with st.expander("Generated SQL"):
+            st.code(query, language='sql')
         
-        for col in formatted_df.columns:
-            if formatted_df[col].empty:
-                continue
+        with st.spinner("Executing query..."):
+            result = execute_dynamic_query(query)
             
-            sample_val = formatted_df[col].dropna().iloc[0] if not formatted_df[col].dropna().empty else None
-            if sample_val is None:
-                continue
-            
-            col_lower = col.lower()
-            
-            # Date formatting
-            if isinstance(sample_val, (datetime, pd.Timestamp)) or 'date' in col_lower:
-                formatted_df[col] = pd.to_datetime(formatted_df[col]).dt.strftime('%Y-%m-%d')
-            
-            # Numeric formatting
-            elif isinstance(sample_val, (int, float)):
-                if formatted_df[col].between(1970, 2030).all():
-                    formatted_df[col] = formatted_df[col].astype(int).astype(str)
-                elif any(term in col_lower for term in ['sales', 'revenue', 'price', 'amount', 'cost', 'total']):
-                    formatted_df[col] = formatted_df[col].round(4).apply(lambda x: f"{x:,.4f}")
-                elif formatted_df[col].abs().max() >= 1000:
-                    formatted_df[col] = formatted_df[col].round(4).apply(lambda x: f"{x:,.4f}")
+        # Save to history
+        memory_manager.save_interaction(prompt, query, result)
         
-        return formatted_df
+        return result
 
-    def render_history(self):
-        """Render chat history in sidebar."""
-        with st.expander("Recent Questions", expanded=True):
-            history = memory_manager.get_chat_history(st.session_state.session_id)
-            if not history:
-                st.markdown("*No questions asked yet*")
-                return
+    def render_sidebar(self):
+        """Render the sidebar with recent queries and schema configuration."""
+        st.subheader("Recent Queries")
+        if st.session_state.chat_history:
+            for thread_id, thread_info in st.session_state.chat_history:
+                if st.button(
+                    thread_info.get('question', 'Untitled Query'),
+                    key=f"history_{thread_id}",
+                    use_container_width=True
+                ):
+                    st.session_state.current_thread = thread_id
+                    st.rerun()
+        else:
+            st.info("No recent queries")
+        
+        # Schema configuration in collapsible expander
+        with st.expander("Schema Configuration", expanded=False):
+            self.schema_editor.render()
 
-            for interaction in reversed(history):  # Show most recent first
-                st.text(datetime.fromisoformat(interaction['timestamp']).strftime("%I:%M %p"))
-                st.markdown(f"**Q:** {interaction['question']}")
-                
-                if st.button("🔍 Show SQL", key=f"sql_{interaction['timestamp']}"):
-                    st.code(interaction['query'], language="sql")
-                
-                st.code(interaction['result'])
-                st.divider()
+    def render_chat(self):
+        """Render the chat interface."""
+        if not st.session_state.active_connection_id:
+            st.info("Please select or add a connection to start querying")
+            return
+            
+        # Display current thread if selected
+        if st.session_state.current_thread:
+            for thread_id, thread_info in st.session_state.chat_history:
+                if thread_id == st.session_state.current_thread:
+                    st.chat_message("user").write(thread_info['question'])
+                    if 'query' in thread_info:
+                        with st.expander("Generated SQL"):
+                            st.code(thread_info['query'], language='sql')
+                    if 'result' in thread_info:
+                        st.chat_message("assistant").write(thread_info['result'])
+                    break
+        
+        # Chat input
+        if prompt := st.chat_input("Ask a question about your data..."):
+            st.chat_message("user").write(prompt)
+            result = self.handle_user_input(prompt)
+            
+            if isinstance(result, pd.DataFrame):
+                st.chat_message("assistant").dataframe(result)
+                st.session_state.current_results = result
+                st.session_state.current_question = prompt
+            else:
+                st.chat_message("assistant").write(result)
+            
+            st.rerun()
+
+    def render(self):
+        """Render the main chat interface."""
+        st.title("Talk to Your Data")
+        
+        # Show connection required message if no active connection
+        if not st.session_state.get('active_connection_id'):
+            st.warning("👈 Please select or add a connection in the sidebar to get started.")
+            return
+        
+        # Main chat interface
+        st.subheader("Ask Questions, Get Answers")
+        self.render_chat()
