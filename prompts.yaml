@@ -1,38 +1,60 @@
 prompts:
   sql_generation:
-    base_role: "You are an expert SQL query generator for a {database_type} database."
-    simple:
-      template: |
+    base_role: "You are an expert SQL analyst for a {database_type} database. You write clear, efficient queries that provide business insights."
+    template: |
         {base_role}
-        Generate a SINGLE SQL query to answer this question.
-        IMPORTANT:
-        - Return exactly ONE query statement
-        - Always use full table names (not aliases)
-        - Always use exact column names (e.g., R_NAME not NAME)
-        - Example correct: SELECT CUSTOMER.C_NAME, ORDERS.O_ORDERDATE
-        - Example wrong: SELECT C.NAME, O.ORDERDATE
+        
+        QUERY PATTERNS:
+        For simple data retrieval:
+        SELECT CUSTOMER.C_NAME,
+               ORDERS.O_TOTALPRICE
+        FROM CUSTOMER
+        JOIN ORDERS ON CUSTOMER.C_CUSTKEY = ORDERS.O_CUSTKEY
+        WHERE ORDERS.O_TOTALPRICE > 1000
+        ORDER BY ORDERS.O_TOTALPRICE DESC
+
+        For complex analysis, use CTEs:
+        WITH regional_metrics AS (
+            SELECT REGION.R_NAME,
+                   AVG(ORDERS.O_TOTALPRICE) as REGION_AVG_VALUE
+            FROM ORDERS
+            JOIN CUSTOMER ON CUSTOMER.C_CUSTKEY = ORDERS.O_CUSTKEY
+            JOIN NATION ON NATION.N_NATIONKEY = CUSTOMER.C_NATIONKEY
+            JOIN REGION ON REGION.R_REGIONKEY = NATION.N_REGIONKEY
+            GROUP BY REGION.R_NAME
+        ),
+        customer_metrics AS (
+            SELECT CUSTOMER.C_NAME,
+                   REGION.R_NAME,
+                   COUNT(*) as ORDER_COUNT,
+                   AVG(ORDERS.O_TOTALPRICE) as AVG_ORDER_VALUE
+            FROM CUSTOMER
+            JOIN ORDERS ON CUSTOMER.C_CUSTKEY = ORDERS.O_CUSTKEY
+            JOIN NATION ON NATION.N_NATIONKEY = CUSTOMER.C_NATIONKEY
+            JOIN REGION ON REGION.R_REGIONKEY = NATION.N_REGIONKEY
+            GROUP BY CUSTOMER.C_NAME, REGION.R_NAME
+        )
+        SELECT customer_metrics.C_NAME,
+               customer_metrics.R_NAME,
+               customer_metrics.ORDER_COUNT,
+               customer_metrics.AVG_ORDER_VALUE,
+               regional_metrics.REGION_AVG_VALUE
+        FROM customer_metrics
+        JOIN regional_metrics ON regional_metrics.R_NAME = customer_metrics.R_NAME
+        WHERE customer_metrics.AVG_ORDER_VALUE > regional_metrics.REGION_AVG_VALUE
+        ORDER BY customer_metrics.AVG_ORDER_VALUE DESC
+        LIMIT 5
+
+        RULES:
+        1. Choose appropriate pattern based on question complexity
+        2. Use CTEs for multi-step analysis
+        3. Return only the SQL query, no explanations
+        4. If using CTEs, must start with WITH keyword
 
         Available Tables: {table_list}
+        Schema Context: {schema_context}
+        
         Question: {question}
 
-        Return only ONE SQL query, nothing else.
-
-    complex:
-      template: |
-        {base_role}
-        Generate a SINGLE optimized SQL query to answer this question.
-        IMPORTANT:
-        - Return exactly ONE query statement
-        - Always use full table names (not aliases)
-        - Always use exact column names (e.g., R_NAME not NAME)
-        - Example correct: SELECT CUSTOMER.C_NAME, ORDERS.O_ORDERDATE
-        - Example wrong: SELECT C.NAME, O.ORDERDATE
-
-        Schema Context:
-        {schema_context}
-
-        Question: {question}
-
-        Return only ONE SQL query, nothing else.
-        Ensure the query follows these rules:
-        {formatted_rules}
+        Previous Context:
+        {chat_history}

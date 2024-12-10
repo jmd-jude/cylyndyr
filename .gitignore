@@ -46,3 +46,7 @@ logs/
 # Project specific
 roadmap/
 /strategic_docs
+
+# Secrets
+.streamlit/secrets.toml
+.env

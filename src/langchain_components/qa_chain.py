@@ -1,6 +1,8 @@
 """Query generation and execution components."""
 from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
+from langchain.memory import ConversationBufferMemory
 import pandas as pd
 import yaml
 import re
@@ -31,17 +33,40 @@ class QueryGenerator:
     """Handles SQL query generation and execution."""
     
     def __init__(self):
-        """Initialize with OpenAI client and load prompts."""
-        self.llm = self._get_openai_client()
+        """Initialize with LLM client and load prompts."""
+        self.llm = self._get_llm_client()
+        self.memory = ConversationBufferMemory(return_messages=True)
         with open('prompts.yaml', 'r') as file:
             self.prompts = yaml.safe_load(file)['prompts']['sql_generation']
     
-    def _get_openai_client(self):
-        """Initialize OpenAI client with API key."""
-        api_key = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OpenAI API key not found")
-        return ChatOpenAI(api_key=api_key, model="gpt-3.5-turbo", temperature=0)
+    def _get_llm_client(self):
+        """Initialize LLM client based on configuration."""
+        model = st.secrets.get("LLM_MODEL", "gpt-3.5-turbo")  # Default to GPT-3.5
+        
+        if "claude" in model.lower():
+            api_key = st.secrets.get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+            if not api_key:
+                raise ValueError("Anthropic API key not found")
+            return ChatAnthropic(api_key=api_key, model=model, temperature=0)
+        else:
+            api_key = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OpenAI API key not found")
+            return ChatOpenAI(api_key=api_key, model=model, temperature=0)
+    
+    def _format_chat_history(self, question: str) -> str:
+        """Format chat history for context."""
+        messages = self.memory.chat_memory.messages
+        if not messages:
+            return ""
+        
+        history = []
+        for msg in messages[-3:]:  # Last 3 interactions
+            if hasattr(msg, 'content') and isinstance(msg.content, str):
+                if "SELECT" in msg.content.upper():  # It's a SQL query
+                    history.append(f"Previous successful query: {msg.content}")
+        
+        return "\n".join(history) if history else ""
     
     def _get_snowflake_connection(self):
         """Create Snowflake connection using active connection config."""
@@ -61,16 +86,6 @@ class QueryGenerator:
             schema=conn_config['schema']
         )
     
-    def _is_complex_query(self, question: str) -> bool:
-        """Determine if a question requires complex query generation."""
-        complex_indicators = [
-            'group by', 'join', 'between', 'having',
-            'rank', 'over', 'partition', 'compare',
-            'trend', 'pattern', 'average', 'total',
-            'most', 'least', 'top', 'bottom'
-        ]
-        return any(indicator in question.lower() for indicator in complex_indicators)
-    
     def _get_table_list(self, config) -> str:
         """Get simple list of available tables."""
         if not config or 'base_schema' not in config:
@@ -78,7 +93,7 @@ class QueryGenerator:
         return ", ".join(config['base_schema']['tables'].keys())
     
     def _get_schema_context(self, config) -> str:
-        """Get relevant schema context for complex queries."""
+        """Get relevant schema context for queries."""
         if not config or 'base_schema' not in config:
             return ""
         
@@ -103,89 +118,53 @@ class QueryGenerator:
         
         return "\n\n".join(context)
     
-    def _get_business_context(self, config) -> str:
-        """Extract business context from schema config."""
-        if not config or 'business_context' not in config:
-            return ""
-        
-        context = []
-        
-        # Add business description
-        if 'description' in config['business_context']:
-            context.append(f"Business Context: {config['business_context']['description']}")
-        
-        # Add business concepts
-        if 'key_concepts' in config['business_context']:
-            concepts = config['business_context']['key_concepts']
-            if concepts:
-                context.append("Key Business Concepts:")
-                context.extend(f"- {concept}" for concept in concepts)
-        
-        # Add table-specific business context
-        if 'table_descriptions' in config['business_context']:
-            for table, info in config['business_context']['table_descriptions'].items():
-                if 'description' in info:
-                    context.append(f"\n{table} represents: {info['description']}")
-                if 'fields' in info:
-                    for field, field_info in info['fields'].items():
-                        if 'description' in field_info:
-                            context.append(f"- {field}: {field_info['description']}")
-        
-        return "\n".join(context)
-    
     def _sanitize_sql(self, query: str) -> str:
         """Clean and format SQL query, ensuring only one statement."""
         # Remove SQL code blocks if present
         query = re.sub(r'```sql|```', '', query)
         
-        # Parse all statements
-        statements = sqlparse.split(query)
+        # Find either WITH or SELECT statement
+        match = re.search(r'\b(WITH|SELECT)\b.*', query, re.IGNORECASE | re.DOTALL)
+        if not match:
+            raise ValueError("No valid SQL query found in the response")
         
-        # Get the first non-empty statement
-        for stmt in statements:
-            if stmt.strip():
-                # Format the single statement
-                formatted = sqlparse.format(
-                    stmt,
-                    reindent=True,
-                    keyword_case='upper',
-                    identifier_case='upper',
-                    strip_comments=True,
-                    use_space_around_operators=True
-                )
-                return formatted.strip()
+        query = match.group(0)
         
-        raise ValueError("No valid SQL statement found in the response")
+        # Remove any text after the last semicolon or after LIMIT clause
+        query = re.split(r';|\s+(?=THIS|Let me|Note)', query)[0]
+        
+        # Format the SQL
+        formatted = sqlparse.format(
+            query,
+            reindent=True,
+            keyword_case='upper',
+            identifier_case='upper',
+            strip_comments=True,
+            use_space_around_operators=True
+        )
+        return formatted.strip()
     
     def generate_query(self, question: str, config=None) -> str:
         """Generate SQL query from natural language question."""
-        is_complex = self._is_complex_query(question)
-        prompt_template = self.prompts['complex' if is_complex else 'simple']['template']
-        
-        # Format prompt with appropriate context
-        prompt = prompt_template.format(
+        prompt = self.prompts['template'].format(
             base_role=self.prompts['base_role'].format(database_type="Snowflake"),
             table_list=self._get_table_list(config),
-            schema_context=self._get_schema_context(config) if is_complex else "",
+            schema_context=self._get_schema_context(config),
             question=question,
-            formatted_rules="\n".join([
-                "1. Use UPPERCASE for table and column names",
-                "2. Use exact column names from the schema",
-                "3. Use appropriate JOIN conditions",
-                "4. Handle NULL values explicitly"
-            ]) if is_complex else ""
+            chat_history=self._format_chat_history(question)
         )
         
         messages = ChatPromptTemplate.from_template(prompt).format_messages(question=question)
         response = self.llm.invoke(messages)
+        
+        if response and response.content:
+            self.memory.chat_memory.add_user_message(question)
+            self.memory.chat_memory.add_ai_message(response.content)
+        
         return self._sanitize_sql(response.content)
     
     def analyze_result(self, df: pd.DataFrame, question: str, config=None) -> str:
         """Generate schema-aware analysis of query results."""
-        # Get relevant business context
-        business_context = self._get_business_context(config)
-        
-        # Prepare analysis prompt
         analysis_prompt = f"""
         Analyze these query results in the context of the business.
         
@@ -196,14 +175,10 @@ class QueryGenerator:
         - Columns: {', '.join(df.columns)}
         - Numeric Summary: {df.describe().to_string() if not df.empty else 'No numeric data'}
         
-        Business Context:
-        {business_context}
-        
         Provide a concise analysis that:
         1. Answers the original question clearly
         2. Highlights key business insights
         3. Notes any significant patterns or anomalies
-        4. Relates findings to business context
         
         Keep response under 3-4 sentences and focus on business value.
         """
