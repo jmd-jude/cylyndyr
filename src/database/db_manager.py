@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import IntegrityError
 from psycopg2.errors import UniqueViolation
 from .models import Base, User, Connection, SchemaConfig
+import snowflake.connector
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -32,6 +33,98 @@ class DatabaseManager:
         self.engine = create_engine(url)
         Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine)
+
+    def _get_snowflake_connection(self, config: Dict) -> snowflake.connector.SnowflakeConnection:
+        """Create Snowflake connection using connection config."""
+        return snowflake.connector.connect(
+            account=config['account'],
+            user=config['username'],
+            password=config['password'],
+            database=config['database'],
+            warehouse=config['warehouse'],
+            schema=config['schema']
+        )
+
+    def introspect_schema(self, connection_id: str) -> Optional[Dict]:
+        """Query Snowflake metadata and build schema configuration."""
+        try:
+            logger.info(f"Introspecting schema for connection: {connection_id}")
+            
+            # Get connection config
+            connection = self.get_connection(connection_id)
+            if not connection:
+                logger.error("Connection not found")
+                return None
+            
+            # Connect to Snowflake
+            conn = self._get_snowflake_connection(connection['config'])
+            cursor = conn.cursor()
+            
+            try:
+                # Get table list
+                cursor.execute("""
+                    SELECT table_name, table_type
+                    FROM information_schema.tables
+                    WHERE table_schema = CURRENT_SCHEMA()
+                    AND table_type = 'BASE TABLE'
+                """)
+                tables = cursor.fetchall()
+                logger.info(f"Found tables: {[t[0] for t in tables]}")
+                
+                schema_config = {
+                    "base_schema": {
+                        "tables": {}
+                    },
+                    "business_context": {
+                        "description": "",
+                        "key_concepts": [],
+                        "table_descriptions": {}
+                    },
+                    "query_guidelines": {
+                        "optimization_rules": []
+                    }
+                }
+                
+                # Get column information for each table
+                for table_name, _ in tables:
+                    cursor.execute(f"""
+                        SELECT 
+                            column_name,
+                            data_type,
+                            is_nullable,
+                            column_default,
+                            is_identity
+                        FROM information_schema.columns
+                        WHERE table_name = %s
+                        AND table_schema = CURRENT_SCHEMA()
+                        ORDER BY ordinal_position
+                    """, (table_name,))
+                    columns = cursor.fetchall()
+                    logger.info(f"Found columns for {table_name}: {[c[0] for c in columns]}")
+                    
+                    # Add table to schema
+                    schema_config["base_schema"]["tables"][table_name] = {
+                        "fields": {}
+                    }
+                    
+                    # Add columns to table
+                    for col_name, data_type, nullable, default, is_identity in columns:
+                        schema_config["base_schema"]["tables"][table_name]["fields"][col_name] = {
+                            "type": data_type,
+                            "nullable": nullable == "YES",
+                            "primary_key": is_identity == "YES"
+                        }
+                
+                logger.info(f"Schema introspection successful. Config: {json.dumps(schema_config, indent=2)}")
+                return schema_config
+                
+            finally:
+                cursor.close()
+                conn.close()
+                
+        except Exception as e:
+            logger.error(f"Error during schema introspection: {str(e)}")
+            return None
 
     def add_user(self, username: str, password_hash: str) -> Tuple[Optional[str], Optional[str]]:
         """Add new user to database."""
@@ -88,8 +181,20 @@ class DatabaseManager:
             )
             session.add(connection)
             session.commit()
-            logger.info(f"Connection added with ID: {connection.id}")
-            return connection.id
+            
+            # Get connection ID
+            connection_id = connection.id
+            
+            # Introspect schema for new connection
+            schema_config = self.introspect_schema(connection_id)
+            if schema_config:
+                logger.info(f"Updating schema config with introspected schema: {json.dumps(schema_config, indent=2)}")
+                self.update_schema_config(connection_id, schema_config)
+            else:
+                logger.warning("No schema config returned from introspection")
+            
+            logger.info(f"Connection added with ID: {connection_id}")
+            return connection_id
         except Exception as e:
             logger.error(f"Error adding connection: {str(e)}")
             session.rollback()
@@ -137,6 +242,8 @@ class DatabaseManager:
         session = self.Session()
         try:
             logger.info(f"Updating schema config for connection: {connection_id}")
+            logger.info(f"New config: {json.dumps(config, indent=2)}")
+            
             connection = session.query(Connection).filter(Connection.id == connection_id).first()
             if not connection:
                 logger.error("Connection not found")
@@ -161,6 +268,7 @@ class DatabaseManager:
             
             session.commit()
             logger.info("Schema config updated successfully")
+            logger.info(f"Final config in database: {json.dumps(schema_config.config, indent=2)}")
             return True
         except Exception as e:
             logger.error(f"Error updating schema config: {str(e)}")
@@ -180,6 +288,7 @@ class DatabaseManager:
             
             if schema_config:
                 logger.info("Schema config found")
+                logger.info(f"Config content: {json.dumps(schema_config.config, indent=2)}")
                 return {
                     'id': schema_config.id,
                     'config': schema_config.config
