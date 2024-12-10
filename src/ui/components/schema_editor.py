@@ -78,23 +78,41 @@ class SchemaEditorUI:
         connections = self.db_manager.get_user_connections(st.session_state.user_id)
         
         if connections:
-            options = {conn['name']: conn['id'] for conn in connections}
-            options = {"Select Connection": None, **options}
+            # Create columns for selector and refresh button
+            col1, col2 = st.columns([4, 1])
             
-            selected_name = st.selectbox(
-                "Switch Connection",
-                options.keys(),
-                index=0 if not st.session_state.active_connection_name else 
-                      list(options.keys()).index(st.session_state.active_connection_name)
-            )
+            with col1:
+                options = {conn['name']: conn['id'] for conn in connections}
+                options = {"Select Connection": None, **options}
+                
+                selected_name = st.selectbox(
+                    "Switch Connection",
+                    options.keys(),
+                    index=0 if not st.session_state.active_connection_name else 
+                          list(options.keys()).index(st.session_state.active_connection_name)
+                )
+                
+                if selected_name != "Select Connection":
+                    connection_id = options[selected_name]
+                    if connection_id != st.session_state.active_connection_id:
+                        st.session_state.active_connection_id = connection_id
+                        st.session_state.active_connection_name = selected_name
+                        st.session_state.selected_table = None
+                        st.rerun()
             
-            if selected_name != "Select Connection":
-                connection_id = options[selected_name]
-                if connection_id != st.session_state.active_connection_id:
-                    st.session_state.active_connection_id = connection_id
-                    st.session_state.active_connection_name = selected_name
-                    st.session_state.selected_table = None
-                    st.rerun()
+            # Add refresh button
+            with col2:
+                if st.session_state.active_connection_id and st.button("🔄 Refresh"):
+                    with st.spinner("Refreshing schema..."):
+                        schema_config = self.db_manager.introspect_schema(st.session_state.active_connection_id)
+                        if schema_config:
+                            if self.db_manager.update_schema_config(st.session_state.active_connection_id, schema_config):
+                                st.success("Schema refreshed successfully!")
+                                st.rerun()
+                            else:
+                                st.error("Failed to update schema configuration")
+                        else:
+                            st.error("Failed to refresh schema")
 
     def render_business_context(self, config: Dict[str, Any], save_callback):
         """Render business context section."""
