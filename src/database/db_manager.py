@@ -287,7 +287,6 @@ class DatabaseManager:
         session = self.Session()
         try:
             logger.info(f"Updating schema config for connection: {connection_id}")
-            logger.info(f"New config: {json.dumps(config, indent=2)}")
             
             connection = session.query(Connection).filter(Connection.id == connection_id).first()
             if not connection:
@@ -300,7 +299,20 @@ class DatabaseManager:
             
             if schema_config:
                 logger.info("Updating existing schema config")
-                schema_config.config = config
+                # Preserve existing business context and query guidelines
+                existing_config = schema_config.config
+                new_config = {
+                    "base_schema": config["base_schema"],
+                    "business_context": existing_config.get("business_context", {
+                        "description": "",
+                        "key_concepts": [],
+                        "table_descriptions": {}
+                    }),
+                    "query_guidelines": existing_config.get("query_guidelines", {
+                        "optimization_rules": []
+                    })
+                }
+                schema_config.config = new_config
                 schema_config.last_modified = datetime.utcnow()
             else:
                 logger.info("Creating new schema config")
