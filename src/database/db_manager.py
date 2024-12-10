@@ -26,14 +26,32 @@ class DatabaseManager:
     """Database manager class."""
     def __init__(self):
         """Initialize database manager."""
+        logger.info("Starting DatabaseManager initialization")
+        logger.info(f"Environment variables: {[k for k in os.environ.keys()]}")
+        
+        # Try different ways to get DATABASE_URL
         url = os.getenv('DATABASE_URL')
+        logger.info(f"DATABASE_URL from os.getenv: {'set' if url else 'not set'}")
+        
         if not url:
+            # Try getting from streamlit secrets
+            try:
+                url = st.secrets["DATABASE_URL"]
+                logger.info("Found DATABASE_URL in streamlit secrets")
+            except Exception as e:
+                logger.error(f"Error getting DATABASE_URL from streamlit secrets: {str(e)}")
+        
+        if not url:
+            logger.error("DATABASE_URL not found in environment or secrets")
             raise ValueError("DATABASE_URL environment variable is not set")
             
-        logger.info(f"Initializing DatabaseManager")
+        logger.info("DatabaseManager URL obtained, creating engine")
         self.engine = create_engine(url)
+        logger.info("Engine created, setting up tables")
         Base.metadata.create_all(self.engine)
+        logger.info("Tables set up, creating session maker")
         self.Session = sessionmaker(bind=self.engine)
+        logger.info("DatabaseManager initialization complete")
 
     def _get_snowflake_connection(self, config: Dict) -> snowflake.connector.SnowflakeConnection:
         """Create Snowflake connection using connection config."""
