@@ -175,7 +175,14 @@ class SchemaEditorUI:
         
         # Get table info
         table_info = config["base_schema"]["tables"][selected_table]
-        table_desc = config.get("business_context", {}).get("table_descriptions", {}).get(selected_table, {})
+        
+        # Initialize table_descriptions structure if needed
+        if "table_descriptions" not in config["business_context"]:
+            config["business_context"]["table_descriptions"] = {}
+        if selected_table not in config["business_context"]["table_descriptions"]:
+            config["business_context"]["table_descriptions"][selected_table] = {}
+        
+        table_desc = config["business_context"]["table_descriptions"][selected_table]
         
         # Table description
         new_table_desc = st.text_area(
@@ -184,11 +191,7 @@ class SchemaEditorUI:
             help="Describe the business purpose of this table"
         )
         if new_table_desc != table_desc.get("description", ""):
-            if "table_descriptions" not in config["business_context"]:
-                config["business_context"]["table_descriptions"] = {}
-            if selected_table not in config["business_context"]["table_descriptions"]:
-                config["business_context"]["table_descriptions"][selected_table] = {}
-            config["business_context"]["table_descriptions"][selected_table]["description"] = new_table_desc
+            table_desc["description"] = new_table_desc
             save_callback()
         
         # Field descriptions
@@ -208,7 +211,13 @@ class SchemaEditorUI:
                     st.write("Required")
             
             with col2:
-                field_desc = table_desc.get("fields", {}).get(field_name, {})
+                # Initialize fields structure if needed
+                if "fields" not in table_desc:
+                    table_desc["fields"] = {}
+                if field_name not in table_desc["fields"]:
+                    table_desc["fields"][field_name] = {}
+                
+                field_desc = table_desc["fields"][field_name]
                 new_field_desc = st.text_area(
                     f"Description for {field_name}",
                     value=field_desc.get("description", ""),
@@ -216,11 +225,7 @@ class SchemaEditorUI:
                     help="Describe the business meaning of this field"
                 )
                 if new_field_desc != field_desc.get("description", ""):
-                    if "fields" not in config["business_context"]["table_descriptions"][selected_table]:
-                        config["business_context"]["table_descriptions"][selected_table]["fields"] = {}
-                    if field_name not in config["business_context"]["table_descriptions"][selected_table]["fields"]:
-                        config["business_context"]["table_descriptions"][selected_table]["fields"][field_name] = {}
-                    config["business_context"]["table_descriptions"][selected_table]["fields"][field_name]["description"] = new_field_desc
+                    field_desc["description"] = new_field_desc
                     save_callback()
 
     def render(self):
