@@ -20,26 +20,6 @@ class SchemaEditorUI:
         if 'selected_table' not in st.session_state:
             st.session_state.selected_table = None
 
-    def create_initial_schema_config(self, connection_id: str, connection_config: Dict) -> bool:
-        """Create initial schema configuration for a new connection."""
-        try:
-            # Basic schema info for new connection
-            schema_info = {
-                "base_schema": {"tables": {}},
-                "business_context": {
-                    "description": "",
-                    "key_concepts": [],
-                    "table_descriptions": {}
-                },
-                "query_guidelines": {
-                    "optimization_rules": []
-                }
-            }
-            return self.db_manager.update_schema_config(connection_id, schema_info)
-        except Exception as e:
-            st.error(f"Error creating schema configuration: {str(e)}")
-            return False
-
     def render_add_connection(self):
         """Render the add connection form."""
         with st.expander("➕ Add New Connection"):
@@ -81,14 +61,11 @@ class SchemaEditorUI:
                             )
                             
                             if connection_id:
-                                if self.create_initial_schema_config(connection_id, config):
-                                    st.success(f"Connection '{conn_name}' added successfully!")
-                                    st.session_state.active_connection_id = connection_id
-                                    st.session_state.active_connection_name = conn_name
-                                    st.session_state.selected_table = None
-                                    st.rerun()
-                                else:
-                                    st.error("Failed to create schema configuration")
+                                st.success(f"Connection '{conn_name}' added successfully!")
+                                st.session_state.active_connection_id = connection_id
+                                st.session_state.active_connection_name = conn_name
+                                st.session_state.selected_table = None
+                                st.rerun()
                             else:
                                 st.error("Failed to add connection")
                         except IntegrityError:
