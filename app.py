@@ -22,7 +22,8 @@ print(f"Current working directory: {os.getcwd()}")
 st.set_page_config(
     page_title="Cylyndyr",
     page_icon="🔍",
-    layout="wide"
+    layout="centered",
+    initial_sidebar_state="collapsed"  # This will make the sidebar start collapsed
 )
 
 def initialize_session_state():
@@ -100,7 +101,7 @@ def main():
     chat_interface.render()
     
     # Add analyze button for current results
-    if st.session_state.current_results is not None:
+    if st.session_state.current_results is not None and st.session_state.chat_history:
         if st.button("📊 Analyze This Result", key="analyze_button"):
             with st.spinner("Analyzing..."):
                 schema_config = schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)

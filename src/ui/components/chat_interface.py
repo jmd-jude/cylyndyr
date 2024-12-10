@@ -48,6 +48,8 @@ class ChatInterfaceUI:
         with col2:
             if st.button("🗑️ Clear", help="Clear conversation history"):
                 st.session_state.chat_history = []
+                st.session_state.current_results = None
+                st.session_state.current_question = None
                 st.rerun()
         
         if st.session_state.chat_history:
