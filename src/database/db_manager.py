@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from psycopg2.errors import UniqueViolation
 from .models import Base, User, Connection, SchemaConfig
 import snowflake.connector
+import traceback
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -36,19 +37,29 @@ class DatabaseManager:
 
     def _get_snowflake_connection(self, config: Dict) -> snowflake.connector.SnowflakeConnection:
         """Create Snowflake connection using connection config."""
-        return snowflake.connector.connect(
-            account=config['account'],
-            user=config['username'],
-            password=config['password'],
-            database=config['database'],
-            warehouse=config['warehouse'],
-            schema=config['schema']
-        )
+        logger.info("Attempting to connect to Snowflake with config: " + 
+                   json.dumps({k: '***' if k == 'password' else v 
+                             for k, v in config.items()}, indent=2))
+        try:
+            conn = snowflake.connector.connect(
+                account=config['account'],
+                user=config['username'],
+                password=config['password'],
+                database=config['database'],
+                warehouse=config['warehouse'],
+                schema=config['schema']
+            )
+            logger.info("Successfully connected to Snowflake")
+            return conn
+        except Exception as e:
+            logger.error(f"Failed to connect to Snowflake: {str(e)}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            raise
 
     def introspect_schema(self, connection_id: str) -> Optional[Dict]:
         """Query Snowflake metadata and build schema configuration."""
         try:
-            logger.info(f"Introspecting schema for connection: {connection_id}")
+            logger.info(f"Starting schema introspection for connection: {connection_id}")
             
             # Get connection config
             connection = self.get_connection(connection_id)
@@ -56,74 +67,85 @@ class DatabaseManager:
                 logger.error("Connection not found")
                 return None
             
-            # Connect to Snowflake
-            conn = self._get_snowflake_connection(connection['config'])
-            cursor = conn.cursor()
+            logger.info("Retrieved connection config, attempting Snowflake connection")
             
+            # Connect to Snowflake
             try:
-                # Get table list
-                cursor.execute("""
-                    SELECT table_name, table_type
-                    FROM information_schema.tables
-                    WHERE table_schema = CURRENT_SCHEMA()
-                    AND table_type = 'BASE TABLE'
-                """)
-                tables = cursor.fetchall()
-                logger.info(f"Found tables: {[t[0] for t in tables]}")
+                conn = self._get_snowflake_connection(connection['config'])
+                cursor = conn.cursor()
                 
-                schema_config = {
-                    "base_schema": {
-                        "tables": {}
-                    },
-                    "business_context": {
-                        "description": "",
-                        "key_concepts": [],
-                        "table_descriptions": {}
-                    },
-                    "query_guidelines": {
-                        "optimization_rules": []
-                    }
-                }
-                
-                # Get column information for each table
-                for table_name, _ in tables:
-                    cursor.execute(f"""
-                        SELECT 
-                            column_name,
-                            data_type,
-                            is_nullable,
-                            column_default,
-                            is_identity
-                        FROM information_schema.columns
-                        WHERE table_name = %s
-                        AND table_schema = CURRENT_SCHEMA()
-                        ORDER BY ordinal_position
-                    """, (table_name,))
-                    columns = cursor.fetchall()
-                    logger.info(f"Found columns for {table_name}: {[c[0] for c in columns]}")
+                try:
+                    logger.info("Querying for tables")
+                    # Get table list
+                    cursor.execute("""
+                        SELECT table_name, table_type
+                        FROM information_schema.tables
+                        WHERE table_schema = CURRENT_SCHEMA()
+                        AND table_type = 'BASE TABLE'
+                    """)
+                    tables = cursor.fetchall()
+                    logger.info(f"Found tables: {[t[0] for t in tables]}")
                     
-                    # Add table to schema
-                    schema_config["base_schema"]["tables"][table_name] = {
-                        "fields": {}
-                    }
-                    
-                    # Add columns to table
-                    for col_name, data_type, nullable, default, is_identity in columns:
-                        schema_config["base_schema"]["tables"][table_name]["fields"][col_name] = {
-                            "type": data_type,
-                            "nullable": nullable == "YES",
-                            "primary_key": is_identity == "YES"
+                    schema_config = {
+                        "base_schema": {
+                            "tables": {}
+                        },
+                        "business_context": {
+                            "description": "",
+                            "key_concepts": [],
+                            "table_descriptions": {}
+                        },
+                        "query_guidelines": {
+                            "optimization_rules": []
                         }
-                
-                logger.info(f"Schema introspection successful. Config: {json.dumps(schema_config, indent=2)}")
-                return schema_config
-                
+                    }
+                    
+                    # Get column information for each table
+                    for table_name, _ in tables:
+                        logger.info(f"Querying columns for table: {table_name}")
+                        cursor.execute(f"""
+                            SELECT 
+                                column_name,
+                                data_type,
+                                is_nullable,
+                                column_default,
+                                is_identity
+                            FROM information_schema.columns
+                            WHERE table_name = %s
+                            AND table_schema = CURRENT_SCHEMA()
+                            ORDER BY ordinal_position
+                        """, (table_name,))
+                        columns = cursor.fetchall()
+                        logger.info(f"Found columns for {table_name}: {[c[0] for c in columns]}")
+                        
+                        # Add table to schema
+                        schema_config["base_schema"]["tables"][table_name] = {
+                            "fields": {}
+                        }
+                        
+                        # Add columns to table
+                        for col_name, data_type, nullable, default, is_identity in columns:
+                            schema_config["base_schema"]["tables"][table_name]["fields"][col_name] = {
+                                "type": data_type,
+                                "nullable": nullable == "YES",
+                                "primary_key": is_identity == "YES"
+                            }
+                    
+                    logger.info(f"Schema introspection successful. Config: {json.dumps(schema_config, indent=2)}")
+                    return schema_config
+                    
+                finally:
+                    logger.info("Closing cursor")
+                    cursor.close()
+                    
             finally:
-                cursor.close()
-                conn.close()
-                
+                if 'conn' in locals():
+                    logger.info("Closing Snowflake connection")
+                    conn.close()
+                    
         except Exception as e:
             logger.error(f"Error during schema introspection: {str(e)}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return None
 
     def add_user(self, username: str, password_hash: str) -> Tuple[Optional[str], Optional[str]]:
@@ -184,19 +206,24 @@ class DatabaseManager:
             
             # Get connection ID
             connection_id = connection.id
+            logger.info(f"Connection added with ID: {connection_id}")
             
             # Introspect schema for new connection
+            logger.info("Starting schema introspection for new connection")
             schema_config = self.introspect_schema(connection_id)
             if schema_config:
                 logger.info(f"Updating schema config with introspected schema: {json.dumps(schema_config, indent=2)}")
-                self.update_schema_config(connection_id, schema_config)
+                if self.update_schema_config(connection_id, schema_config):
+                    logger.info("Schema config updated successfully")
+                else:
+                    logger.error("Failed to update schema config")
             else:
                 logger.warning("No schema config returned from introspection")
             
-            logger.info(f"Connection added with ID: {connection_id}")
             return connection_id
         except Exception as e:
             logger.error(f"Error adding connection: {str(e)}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             session.rollback()
             return None
         finally:
@@ -272,6 +299,7 @@ class DatabaseManager:
             return True
         except Exception as e:
             logger.error(f"Error updating schema config: {str(e)}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             session.rollback()
             return False
         finally:
