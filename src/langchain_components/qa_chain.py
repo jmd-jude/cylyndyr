@@ -119,26 +119,63 @@ class QueryGenerator:
         if not config or 'base_schema' not in config:
             return ""
         
-        context = []
+        # Start with business context if available
+        context_parts = []
+        if config.get('business_context', {}).get('description'):
+            context_parts.append("Business Context:\n" + config['business_context']['description'])
+        
+        if config['business_context'].get('key_concepts'):
+            context_parts.append("Key Business Concepts:\n- " + "\n- ".join(config['business_context']['key_concepts']))
+        
+        # Add query guidelines if available
+        if config.get('query_guidelines', {}).get('optimization_rules'):
+            context_parts.append("Query Guidelines:\n- " + "\n- ".join(config['query_guidelines']['optimization_rules']))
+        
+        # Add table and field information with business descriptions
         for table_name, table_info in config['base_schema']['tables'].items():
-            table_desc = []
-            table_desc.append(f"Table: {table_name}")
+            table_parts = [f"Table: {table_name}"]
             
-            # Add fields
+            # Add table description if available
+            table_desc = config.get('business_context', {}).get('table_descriptions', {}).get(table_name, {}).get('description')
+            if table_desc:
+                table_parts.append(f"Description: {table_desc}")
+            
+            # Add fields with their technical and business descriptions
             fields = []
             for field_name, field_info in table_info.get('fields', {}).items():
-                field_desc = f"- {field_name} ({field_info['type']})"
+                field_desc = [f"- {field_name} ({field_info['type']})"]
+                
+                # Add technical attributes
+                attributes = []
                 if field_info.get('primary_key'):
-                    field_desc += " (Primary Key)"
+                    attributes.append("Primary Key")
                 if field_info.get('foreign_key'):
-                    field_desc += f" (Foreign Key -> {field_info['foreign_key']})"
-                fields.append(field_desc)
+                    attributes.append(f"Foreign Key -> {field_info['foreign_key']}")
+                if field_info.get('nullable'):
+                    attributes.append("Optional")
+                if attributes:
+                    field_desc.append(f"  ({', '.join(attributes)})")
+                
+                # Add business description if available
+                business_desc = (
+                    config.get('business_context', {})
+                    .get('table_descriptions', {})
+                    .get(table_name, {})
+                    .get('fields', {})
+                    .get(field_name, {})
+                    .get('description')
+                )
+                if business_desc:
+                    field_desc.append(f"  Description: {business_desc}")
+                
+                fields.append(" ".join(field_desc))
             
             if fields:
-                table_desc.append("Fields:\n" + "\n".join(fields))
-            context.append("\n".join(table_desc))
+                table_parts.append("Fields:\n" + "\n".join(fields))
+            
+            context_parts.append("\n".join(table_parts))
         
-        return "\n\n".join(context)
+        return "\n\n".join(context_parts)
     
     def _sanitize_sql(self, query: str) -> str:
         """Clean and format SQL query, ensuring only one statement."""
@@ -187,10 +224,37 @@ class QueryGenerator:
     
     def analyze_result(self, df: pd.DataFrame, question: str, config=None) -> str:
         """Generate schema-aware analysis of query results."""
+        # Get business context and field descriptions
+        business_context = ""
+        if config and config.get('business_context'):
+            if config['business_context'].get('description'):
+                business_context += f"\nBusiness Context: {config['business_context']['description']}"
+            if config['business_context'].get('key_concepts'):
+                business_context += f"\nKey Concepts: {', '.join(config['business_context']['key_concepts'])}"
+        
+        # Get field descriptions for columns in the result
+        field_descriptions = []
+        if config and 'base_schema' in config:
+            for table_info in config['base_schema']['tables'].values():
+                for field_name, field_info in table_info.get('fields', {}).items():
+                    if field_name in df.columns:
+                        desc = (
+                            config.get('business_context', {})
+                            .get('table_descriptions', {})
+                            .get(table_info.get('name', ''), {})
+                            .get('fields', {})
+                            .get(field_name, {})
+                            .get('description')
+                        )
+                        if desc:
+                            field_descriptions.append(f"{field_name}: {desc}")
+        
+        field_context = "\nField Descriptions:\n- " + "\n- ".join(field_descriptions) if field_descriptions else ""
+        
         analysis_prompt = f"""
         Analyze these query results in the context of the business.
         
-        Question Asked: {question}
+        Question Asked: {question}{business_context}{field_context}
         
         Data Summary:
         - Row Count: {len(df)}
