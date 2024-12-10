@@ -24,10 +24,20 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(message)s',
     handlers=[
-        logging.FileHandler(f'logs/queries_{datetime.now().strftime("%Y%m%d")}.log'),
-        logging.StreamHandler()
+        logging.StreamHandler()  # Always add StreamHandler for console output
     ]
 )
+
+# Try to set up file logging, but don't fail if we can't
+try:
+    # Create logs directory if it doesn't exist
+    os.makedirs('logs', exist_ok=True)
+    # Add FileHandler if we can create the directory
+    file_handler = logging.FileHandler(f'logs/queries_{datetime.now().strftime("%Y%m%d")}.log')
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+    logging.getLogger().addHandler(file_handler)
+except Exception as e:
+    logging.warning(f"Could not set up file logging: {str(e)}")
 
 class QueryGenerator:
     """Handles SQL query generation and execution."""
