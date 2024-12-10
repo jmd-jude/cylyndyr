@@ -41,18 +41,30 @@ class QueryGenerator:
     
     def _get_llm_client(self):
         """Initialize LLM client based on configuration."""
-        model = st.secrets.get("LLM_MODEL", "gpt-3.5-turbo")  # Default to GPT-3.5
-        
-        if "claude" in model.lower():
-            api_key = st.secrets.get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
-            if not api_key:
-                raise ValueError("Anthropic API key not found")
-            return ChatAnthropic(api_key=api_key, model=model, temperature=0)
-        else:
-            api_key = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError("OpenAI API key not found")
-            return ChatOpenAI(api_key=api_key, model=model, temperature=0)
+        try:
+            model = st.secrets["LLM_MODEL"]
+            temperature = float(st.secrets["LLM_TEMPERATURE"])
+            
+            if "claude" in model.lower():
+                return ChatAnthropic(
+                    api_key=st.secrets["ANTHROPIC_API_KEY"],
+                    model=model,
+                    temperature=temperature
+                )
+            else:
+                return ChatOpenAI(
+                    api_key=st.secrets["OPENAI_API_KEY"],
+                    model=model,
+                    temperature=temperature
+                )
+        except Exception as e:
+            logging.error(f"Error initializing LLM client: {str(e)}")
+            # Fallback to OpenAI
+            return ChatOpenAI(
+                api_key=st.secrets["OPENAI_API_KEY"],
+                model="gpt-3.5-turbo",
+                temperature=0
+            )
     
     def _format_chat_history(self, question: str) -> str:
         """Format chat history for context."""
