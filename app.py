@@ -111,15 +111,17 @@ def main():
         col1, col2 = st.columns([3, 1])
         
         with col1:
-            if st.button("📊 Analyze This Result", key="analyze_button"):
-                with st.spinner("Analyzing..."):
-                    schema_config = schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)
-                    narrative = query_generator.analyze_result(
-                        st.session_state.current_results,
-                        st.session_state.current_question,
-                        config=schema_config.get('config') if schema_config else None
-                    )
-                    st.info(narrative)
+            # Only show analyze button when not in analysis mode
+            if not st.session_state.analysis_mode:
+                if st.button("📊 Analyze This Result", key="analyze_button"):
+                    with st.spinner("Analyzing..."):
+                        schema_config = schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)
+                        narrative = query_generator.analyze_result(
+                            st.session_state.current_results,
+                            st.session_state.current_question,
+                            config=schema_config.get('config') if schema_config else None
+                        )
+                        st.info(narrative)
         
         with col2:
             st.session_state.analysis_mode = st.toggle(
