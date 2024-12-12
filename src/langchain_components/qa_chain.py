@@ -46,6 +46,7 @@ class QueryGenerator:
         """Initialize with LLM client and load prompts."""
         self.llm = self._get_llm_client()
         self.memory = ConversationBufferMemory(return_messages=True)
+        self.analysis_memory = ConversationBufferMemory(return_messages=True)  # Separate memory for analysis
         with open('prompts.yaml', 'r') as file:
             self.prompts = yaml.safe_load(file)['prompts']['sql_generation']
     
@@ -87,6 +88,20 @@ class QueryGenerator:
             if hasattr(msg, 'content') and isinstance(msg.content, str):
                 if "SELECT" in msg.content.upper():  # It's a SQL query
                     history.append(f"Previous successful query: {msg.content}")
+        
+        return "\n".join(history) if history else ""
+    
+    def _format_analysis_history(self) -> str:
+        """Format analysis conversation history."""
+        messages = self.analysis_memory.chat_memory.messages
+        if not messages:
+            return ""
+        
+        history = []
+        for msg in messages[-3:]:  # Last 3 interactions
+            if hasattr(msg, 'content'):
+                role = "User" if msg.type == "human" else "Assistant"
+                history.append(f"{role}: {msg.content}")
         
         return "\n".join(history) if history else ""
     
@@ -177,6 +192,40 @@ class QueryGenerator:
         
         return "\n\n".join(context_parts)
     
+    def _get_business_context(self, config) -> str:
+        """Extract business context from config."""
+        if not config or not config.get('business_context'):
+            return ""
+        
+        context = ""
+        if config['business_context'].get('description'):
+            context += f"\nBusiness Context: {config['business_context']['description']}"
+        if config['business_context'].get('key_concepts'):
+            context += f"\nKey Concepts: {', '.join(config['business_context']['key_concepts'])}"
+        return context
+    
+    def _get_field_context(self, df: pd.DataFrame, config) -> str:
+        """Extract field context for current columns."""
+        if not config or not config.get('base_schema'):
+            return ""
+        
+        field_descriptions = []
+        for table_info in config['base_schema']['tables'].values():
+            for field_name, field_info in table_info.get('fields', {}).items():
+                if field_name in df.columns:
+                    desc = (
+                        config.get('business_context', {})
+                        .get('table_descriptions', {})
+                        .get(table_info.get('name', ''), {})
+                        .get('fields', {})
+                        .get(field_name, {})
+                        .get('description')
+                    )
+                    if desc:
+                        field_descriptions.append(f"{field_name}: {desc}")
+        
+        return "\nField Descriptions:\n- " + "\n- ".join(field_descriptions) if field_descriptions else ""
+    
     def _sanitize_sql(self, query: str) -> str:
         """Clean and format SQL query, ensuring only one statement."""
         # Remove SQL code blocks if present
@@ -224,32 +273,8 @@ class QueryGenerator:
     
     def analyze_result(self, df: pd.DataFrame, question: str, config=None) -> str:
         """Generate schema-aware analysis of query results."""
-        # Get business context and field descriptions
-        business_context = ""
-        if config and config.get('business_context'):
-            if config['business_context'].get('description'):
-                business_context += f"\nBusiness Context: {config['business_context']['description']}"
-            if config['business_context'].get('key_concepts'):
-                business_context += f"\nKey Concepts: {', '.join(config['business_context']['key_concepts'])}"
-        
-        # Get field descriptions for columns in the result
-        field_descriptions = []
-        if config and 'base_schema' in config:
-            for table_info in config['base_schema']['tables'].values():
-                for field_name, field_info in table_info.get('fields', {}).items():
-                    if field_name in df.columns:
-                        desc = (
-                            config.get('business_context', {})
-                            .get('table_descriptions', {})
-                            .get(table_info.get('name', ''), {})
-                            .get('fields', {})
-                            .get(field_name, {})
-                            .get('description')
-                        )
-                        if desc:
-                            field_descriptions.append(f"{field_name}: {desc}")
-        
-        field_context = "\nField Descriptions:\n- " + "\n- ".join(field_descriptions) if field_descriptions else ""
+        business_context = self._get_business_context(config)
+        field_context = self._get_field_context(df, config)
         
         analysis_prompt = f"""
         Analyze these query results in the context of the business.
@@ -270,6 +295,49 @@ class QueryGenerator:
         """
         
         response = self.llm.invoke([{"role": "user", "content": analysis_prompt}])
+        
+        # Initialize analysis conversation with the first analysis
+        self.analysis_memory.clear()  # Clear previous analysis conversation
+        self.analysis_memory.chat_memory.add_user_message(question)
+        self.analysis_memory.chat_memory.add_ai_message(response.content)
+        
+        return response.content
+    
+    def continue_analysis(self, follow_up: str, df: pd.DataFrame, original_question: str, config=None) -> str:
+        """Continue analysis conversation about the results."""
+        business_context = self._get_business_context(config)
+        field_context = self._get_field_context(df, config)
+        conversation_history = self._format_analysis_history()
+        
+        analysis_prompt = f"""
+        Continue analyzing these query results based on the follow-up question.
+        
+        Original Question: {original_question}
+        Follow-up Question: {follow_up}
+        {business_context}{field_context}
+        
+        Previous Conversation:
+        {conversation_history}
+        
+        Data Summary:
+        - Row Count: {len(df)}
+        - Columns: {', '.join(df.columns)}
+        - Numeric Summary: {df.describe().to_string() if not df.empty else 'No numeric data'}
+        
+        Provide a focused response that:
+        1. Directly addresses the follow-up question
+        2. Maintains context from the previous conversation
+        3. Highlights relevant insights from the data
+        
+        Keep the response clear and business-focused.
+        """
+        
+        response = self.llm.invoke([{"role": "user", "content": analysis_prompt}])
+        
+        # Add to analysis conversation history
+        self.analysis_memory.chat_memory.add_user_message(follow_up)
+        self.analysis_memory.chat_memory.add_ai_message(response.content)
+        
         return response.content
     
     def execute_query(self, query: str) -> pd.DataFrame:

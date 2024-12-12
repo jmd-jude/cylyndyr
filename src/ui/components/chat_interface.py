@@ -19,8 +19,8 @@ class ChatInterfaceUI:
         if 'chat_history' not in st.session_state:
             st.session_state.chat_history = []
 
-    def handle_user_input(self, prompt: str) -> Union[pd.DataFrame, str]:
-        """Handle user input and return results."""
+    def _handle_sql_generation(self, prompt: str) -> Union[pd.DataFrame, str]:
+        """Handle SQL generation mode."""
         with st.spinner("Generating SQL query..."):
             schema_config = self.schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)
             query = generate_dynamic_query(prompt, config=schema_config.get('config') if schema_config else None)
@@ -40,6 +40,33 @@ class ChatInterfaceUI:
             
             return result
 
+    def _handle_analysis_conversation(self, prompt: str) -> str:
+        """Handle analysis conversation mode."""
+        with st.spinner("Analyzing..."):
+            schema_config = self.schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)
+            response = query_generator.continue_analysis(
+                prompt,
+                st.session_state.current_results,
+                st.session_state.current_question,
+                config=schema_config.get('config') if schema_config else None
+            )
+            
+            st.session_state.chat_history.append({
+                'timestamp': datetime.now().isoformat(),
+                'question': prompt,
+                'type': 'analysis',
+                'result': response
+            })
+            
+            return response
+
+    def handle_user_input(self, prompt: str) -> Union[pd.DataFrame, str]:
+        """Handle user input based on current mode."""
+        if st.session_state.analysis_mode:
+            return self._handle_analysis_conversation(prompt)
+        else:
+            return self._handle_sql_generation(prompt)
+
     def render_sidebar(self):
         """Render the sidebar with recent queries."""
         st.subheader("Recent Questions")
@@ -50,6 +77,7 @@ class ChatInterfaceUI:
                 st.session_state.chat_history = []
                 st.session_state.current_results = None
                 st.session_state.current_question = None
+                st.session_state.analysis_mode = False  # Reset mode on clear
                 st.rerun()
         
         if st.session_state.chat_history:
@@ -58,13 +86,17 @@ class ChatInterfaceUI:
                 with st.expander(f"{timestamp.strftime('%I:%M %p')} - {interaction['question'][:30]}..."):
                     st.write("Question:")
                     st.write(interaction['question'])
-                    st.write("SQL Query:")
-                    st.code(interaction['query'], language='sql')
-                    st.write("Result:")
-                    if isinstance(interaction['result'], pd.DataFrame):
-                        st.dataframe(interaction['result'])
-                    else:
+                    if interaction.get('type') == 'analysis':
+                        st.write("Analysis:")
                         st.write(interaction['result'])
+                    else:
+                        st.write("SQL Query:")
+                        st.code(interaction['query'], language='sql')
+                        st.write("Result:")
+                        if isinstance(interaction['result'], pd.DataFrame):
+                            st.dataframe(interaction['result'])
+                        else:
+                            st.write(interaction['result'])
         else:
             st.info("No recent questions")
             
@@ -77,7 +109,14 @@ class ChatInterfaceUI:
             st.info("Please select or add a connection to start querying")
             return
         
-        if prompt := st.chat_input("Ask a question about your data..."):
+        # Update input placeholder based on mode
+        placeholder = (
+            "Ask follow-up questions about the analysis..."
+            if st.session_state.analysis_mode
+            else "Ask a question about your data..."
+        )
+        
+        if prompt := st.chat_input(placeholder):
             st.chat_message("user").write(prompt)
             result = self.handle_user_input(prompt)
             
@@ -99,5 +138,12 @@ class ChatInterfaceUI:
             st.warning("👈 Please select or add a connection in the sidebar to get started.")
             return
         
-        st.subheader("Ask Questions, Get Answers")
+        # Update subheader based on mode
+        subheader = (
+            "Analyze & Explore Results"
+            if st.session_state.analysis_mode
+            else "Ask Questions, Get Answers"
+        )
+        st.subheader(subheader)
+        
         self.render_chat()

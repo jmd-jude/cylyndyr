@@ -44,6 +44,8 @@ def initialize_session_state():
         st.session_state.current_results = None
     if 'current_question' not in st.session_state:
         st.session_state.current_question = None
+    if 'analysis_mode' not in st.session_state:
+        st.session_state.analysis_mode = False
 
 def render_sidebar(login_ui: LoginUI, schema_editor: SchemaEditorUI, chat_interface: ChatInterfaceUI):
     """Render sidebar with user info and connection management."""
@@ -100,17 +102,31 @@ def main():
     # Main content area
     chat_interface.render()
     
-    # Add analyze button for current results
+    # Show current mode indicator
+    if st.session_state.analysis_mode:
+        st.info("🔍 Analysis Mode: Ask follow-up questions about the current results")
+    
+    # Add analyze button and mode toggle for current results
     if st.session_state.current_results is not None and st.session_state.chat_history:
-        if st.button("📊 Analyze This Result", key="analyze_button"):
-            with st.spinner("Analyzing..."):
-                schema_config = schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)
-                narrative = query_generator.analyze_result(
-                    st.session_state.current_results,
-                    st.session_state.current_question,
-                    config=schema_config.get('config') if schema_config else None
-                )
-                st.info(narrative)
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            if st.button("📊 Analyze This Result", key="analyze_button"):
+                with st.spinner("Analyzing..."):
+                    schema_config = schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)
+                    narrative = query_generator.analyze_result(
+                        st.session_state.current_results,
+                        st.session_state.current_question,
+                        config=schema_config.get('config') if schema_config else None
+                    )
+                    st.info(narrative)
+        
+        with col2:
+            st.session_state.analysis_mode = st.toggle(
+                "Analysis Mode",
+                value=st.session_state.analysis_mode,
+                help="Toggle between SQL queries and analysis conversation"
+            )
 
 if __name__ == "__main__":
     main()
