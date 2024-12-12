@@ -106,13 +106,19 @@ def main():
     if st.session_state.analysis_mode:
         st.info("🔍 Analysis Mode: Ask follow-up questions about the current results")
     
-    # Add analyze button and mode toggle for current results
+    # Add mode toggle and analyze button for current results
     if st.session_state.current_results is not None and st.session_state.chat_history:
-        col1, col2 = st.columns([3, 1])
+        # Mode toggle first
+        st.session_state.analysis_mode = st.toggle(
+            "Analysis Mode",
+            value=st.session_state.analysis_mode,
+            help="Toggle between SQL queries and analysis conversation"
+        )
         
-        with col1:
-            # Only show analyze button when not in analysis mode
-            if not st.session_state.analysis_mode:
+        # Then analyze button in its own column layout
+        if not st.session_state.analysis_mode:
+            col1, _ = st.columns([3, 1])
+            with col1:
                 if st.button("📊 Analyze This Result", key="analyze_button"):
                     with st.spinner("Analyzing..."):
                         schema_config = schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)
@@ -122,13 +128,6 @@ def main():
                             config=schema_config.get('config') if schema_config else None
                         )
                         st.info(narrative)
-        
-        with col2:
-            st.session_state.analysis_mode = st.toggle(
-                "Analysis Mode",
-                value=st.session_state.analysis_mode,
-                help="Toggle between SQL queries and analysis conversation"
-            )
 
 if __name__ == "__main__":
     main()
