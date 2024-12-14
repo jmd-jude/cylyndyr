@@ -104,15 +104,15 @@ def main():
     
     # Show current mode indicator
     if st.session_state.analysis_mode:
-        st.info("🔍 Analysis Mode: Ask follow-up questions about the current results")
+        st.info("🔍 Discussion Mode: Uncover insights in the current results")
     
     # Add mode toggle and analyze button for current results
     if st.session_state.current_results is not None and st.session_state.chat_history:
         # Mode toggle first
         st.session_state.analysis_mode = st.toggle(
-            "Analysis Mode",
+            "Discussion Mode",
             value=st.session_state.analysis_mode,
-            help="Toggle between SQL queries and analysis conversation"
+            help="Toggle between data queries and conversational analysis"
         )
         
         # Then analyze button in its own column layout
@@ -120,7 +120,7 @@ def main():
             col1, _ = st.columns([3, 1])
             with col1:
                 if st.button("📊 Analyze This Result", key="analyze_button"):
-                    with st.spinner("Analyzing..."):
+                    with st.spinner("Thinking..."):
                         schema_config = schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)
                         narrative = query_generator.analyze_result(
                             st.session_state.current_results,

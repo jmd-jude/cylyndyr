@@ -84,7 +84,7 @@ class QueryGenerator:
             return ""
         
         history = []
-        for msg in messages[-3:]:  # Last 3 interactions
+        for msg in messages[-7:]:  # Last 7 interactions
             if hasattr(msg, 'content') and isinstance(msg.content, str):
                 if "SELECT" in msg.content.upper():  # It's a SQL query
                     history.append(f"Previous successful query: {msg.content}")
@@ -98,7 +98,7 @@ class QueryGenerator:
             return ""
         
         history = []
-        for msg in messages[-3:]:  # Last 3 interactions
+        for msg in messages[-6:]:  # Last 6 interactions
             if hasattr(msg, 'content'):
                 role = "User" if msg.type == "human" else "Assistant"
                 history.append(f"{role}: {msg.content}")
@@ -277,21 +277,42 @@ class QueryGenerator:
         field_context = self._get_field_context(df, config)
         
         analysis_prompt = f"""
-        Analyze these query results in the context of the business.
+        You are a Business Strategy Advisor translating data into actionable insights.
+
+        FORMATTING REQUIREMENTS:
+        - Use plain text only - no special characters or mathematical symbols
+        - Maintain proper spacing between all words and numbers
+        - Format numbers with commas for thousands (e.g., "1,234" not "1234")
+        - Use "to" instead of dashes or other symbols for ranges
+        - Express percentages as "X%" (e.g., "28%" not "28 percent")
+        - Keep all words separate (e.g., "significantly above the mean" not "significantlyabovethemean")
         
-        Question Asked: {question}{business_context}{field_context}
+        Original Question: {question}{business_context}{field_context}
         
         Data Summary:
         - Row Count: {len(df)}
         - Columns: {', '.join(df.columns)}
         - Numeric Summary: {df.describe().to_string() if not df.empty else 'No numeric data'}
+
+        RESPONSE FRAMEWORK:
+        1. Key Finding
+        - Lead with the most significant insight
+        - Quantify the impact or scale
+        - Highlight any unexpected patterns
+
+        2. Business Implications
+        - Revenue/cost impact
+        - Customer/market implications
+        - Operational considerations
+        - Risk factors
+
+        3. Recommendations
+        - One primary action to take
+        - Quick wins vs strategic initiatives
+        - Resource requirements
+        - Expected outcomes
         
-        Provide a concise analysis that:
-        1. Answers the original question clearly
-        2. Highlights key business insights
-        3. Notes any significant patterns or anomalies
-        
-        Keep response under 3-4 sentences and focus on business value.
+        Keep response concise and business-focused. Prioritize insights that drive action. Always end with "If you would like to discuss these findings further, toggle to 'Discussion Mode', above."
         """
         
         response = self.llm.invoke([{"role": "user", "content": analysis_prompt}])
@@ -310,26 +331,67 @@ class QueryGenerator:
         conversation_history = self._format_analysis_history()
         
         analysis_prompt = f"""
-        Continue analyzing these query results based on the follow-up question.
+        You are a Business Intelligence Advisor engaged in an ongoing data exploration.
+
+        FORMATTING REQUIREMENTS:
+        - Use plain text only - no special characters or mathematical symbols
+        - Maintain proper spacing between all words and numbers
+        - Format numbers with commas for thousands (e.g., "1,234" not "1234")
+        - Use "to" instead of dashes or other symbols for ranges
+        - Express percentages as "X%" (e.g., "28%" not "28 percent")
+        - Keep all words separate (e.g., "significantly above the mean" not "significantlyabovethemean")
         
+        CONVERSATION CONTEXT:
         Original Question: {original_question}
-        Follow-up Question: {follow_up}
-        {business_context}{field_context}
-        
-        Previous Conversation:
+        Current Follow-up: {follow_up}
+        Previous Discussion:
         {conversation_history}
+
+        BUSINESS CONTEXT:
+        {business_context}{field_context}
         
         Data Summary:
         - Row Count: {len(df)}
         - Columns: {', '.join(df.columns)}
         - Numeric Summary: {df.describe().to_string() if not df.empty else 'No numeric data'}
         
-        Provide a focused response that:
-        1. Directly addresses the follow-up question
-        2. Maintains context from the previous conversation
-        3. Highlights relevant insights from the data
-        
-        Keep the response clear and business-focused.
+        RESPONSE APPROACH:
+        0. Context Integration
+        - Connect current findings with previous observations
+        - Highlight emerging patterns across analyses
+        - Note any shifts in understanding
+
+        1. Direct Answer
+        - Address the specific follow-up question
+        - Connect to previous insights
+        - Highlight new findings
+
+        2. Deeper Investigation
+        - Explore underlying factors
+        - Challenge assumptions
+        - Identify correlations
+        - Present an unexpected or non-obvious angle
+
+        3. Next Steps
+        - Suggest additional angles to explore
+        - Identify data gaps if any
+        - Recommend concrete actions
+        - When insights suggest valuable follow-up analysis, recommend specific queries:
+          "To investigate this further, switch to Query Mode and ask: '[natural language question]'"
+
+        GUIDANCE FOR SUGGESTING QUERIES:
+        - Suggest new queries when you identify:
+          * Patterns that deserve deeper investigation
+          * Gaps that available data could fill
+          * Assumptions that need validation
+          * Potential correlations worth exploring
+          * Unexpected trends that need context
+        - Frame suggested questions in natural language
+        - Focus on business impact and actionable insights
+        - Connect suggested queries to current findings
+
+        Maintain continuity with previous analysis while driving towards actionable conclusions.
+        If suggesting a new query, make it explicit and easy to act on.
         """
         
         response = self.llm.invoke([{"role": "user", "content": analysis_prompt}])
