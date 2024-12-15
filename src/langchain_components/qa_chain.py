@@ -6,7 +6,7 @@ from langchain.memory import ConversationBufferMemory
 import pandas as pd
 import yaml
 import re
-from datetime import datetime
+from datetime import datetime, date
 import logging
 import os
 import snowflake.connector
@@ -17,6 +17,7 @@ from src.database.db_manager import DatabaseManager
 from src.utils.formatting import format_dataframe
 from uuid import uuid4
 import json
+from decimal import Decimal
 
 # Load environment variables
 load_dotenv(override=True)
@@ -41,6 +42,12 @@ try:
 except Exception as e:
     logging.warning(f"Could not set up file logging: {str(e)}")
 
+def decimal_to_float(obj):
+    """Convert Decimal objects to float for JSON serialization."""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    return obj
+
 class QueryGenerator:
     """Handles SQL query generation and execution."""
     
@@ -63,14 +70,78 @@ class QueryGenerator:
         self.logger.addHandler(json_handler)
     
     def _log_interaction(self, interaction_type: str, **kwargs):
-        """Log structured interaction data."""
+        """Log structured interaction data to file and database."""
+        current_time = datetime.now()
+        
+        # Pre-process the kwargs to handle special types
+        def json_safe_value(v):
+            if isinstance(v, (datetime, date)):
+                return v.isoformat()
+            if isinstance(v, Decimal):
+                return float(v)
+            return v
+        
+        # Recursively process nested dictionaries and lists
+        def process_payload(obj):
+            if isinstance(obj, dict):
+                return {k: process_payload(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [process_payload(i) for i in obj]
+            return json_safe_value(obj)
+        
+        # Process the kwargs
+        processed_kwargs = process_payload(kwargs)
+        
         log_entry = {
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': current_time.isoformat(),
             'thread_id': self.thread_id,
             'type': interaction_type,
-            **kwargs
+            'database_name': st.session_state.get('active_connection_name'),
+            'user_id': st.session_state.get('user_id'),
+            **processed_kwargs
         }
+        
+        # Keep existing file logging
         self.logger.info(json.dumps(log_entry))
+        
+        # Add database logging
+        conn = None
+        try:
+            conn = self._get_snowflake_connection()
+            cursor = conn.cursor()
+            
+            # Convert to object that Snowflake can handle
+            snowflake_payload = json.dumps(log_entry)
+            
+            cursor.execute(
+                """
+                INSERT INTO APP_METRICS.PUBLIC.LOG_INTERACTIONS 
+                (TIMESTAMP, THREAD_ID, TYPE, DATABASE_NAME, USER_ID, PAYLOAD, CREATED_AT) 
+                SELECT 
+                    %s, %s, %s, %s, %s, 
+                    PARSE_JSON(%s),
+                    %s
+                """,
+                (
+                    current_time,
+                    self.thread_id,
+                    interaction_type,
+                    st.session_state.get('active_connection_name'),
+                    st.session_state.get('user_id'),
+                    snowflake_payload,
+                    current_time
+                )
+            )
+            conn.commit()
+        except Exception as e:
+            logging.error(f"Failed to log to database: {str(e)}")
+            logging.error(f"Attempted payload: {snowflake_payload}")  # Add this for debugging
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
     
     def _get_llm_client(self):
         """Initialize LLM client based on configuration."""
@@ -326,7 +397,10 @@ class QueryGenerator:
             raise
         finally:
             if conn:
-                conn.close()
+                try:
+                    conn.close()
+                except Exception:
+                    pass
     
     def analyze_result(self, df: pd.DataFrame, question: str, config=None) -> str:
         """Generate schema-aware analysis of query results."""

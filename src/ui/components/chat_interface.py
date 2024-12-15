@@ -46,7 +46,7 @@ class ChatInterfaceUI:
         """Handle analysis conversation mode."""
         with st.spinner("Analyzing..."):
             schema_config = self.schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)
-            response = get_query_generator.continue_analysis(
+            response = get_query_generator().continue_analysis(
                 prompt,
                 st.session_state.current_results,
                 st.session_state.current_question,

@@ -122,7 +122,7 @@ def main():
                 if st.button("📊 Analyze This Result", key="analyze_button"):
                     with st.spinner("Thinking..."):
                         schema_config = schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)
-                        narrative = get_query_generator.analyze_result(
+                        narrative = get_query_generator().analyze_result(
                             st.session_state.current_results,
                             st.session_state.current_question,
                             config=schema_config.get('config') if schema_config else None
