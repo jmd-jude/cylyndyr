@@ -46,6 +46,7 @@ logs/
 # Project specific
 roadmap/
 /strategic_docs
+migrations/
 
 # Secrets
 .streamlit/secrets.toml
