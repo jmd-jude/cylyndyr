@@ -1,9 +1,12 @@
 """Schema editor UI component."""
 import streamlit as st
 import json
+import logging
 from typing import Optional, Dict, Any
 from sqlalchemy.exc import IntegrityError
 from src.database.db_manager import get_database_manager
+
+logger = logging.getLogger(__name__)
 
 class SchemaEditorUI:
     """Schema editor UI component."""
@@ -22,6 +25,10 @@ class SchemaEditorUI:
 
     def render_add_connection(self):
         """Render the add connection form."""
+        # Only show add connection form to admins
+        if not st.session_state.get('is_admin', False):
+            return
+
         with st.expander("➕ Add New Connection"):
             # Connection form
             with st.form("add_connection_form"):
@@ -100,9 +107,9 @@ class SchemaEditorUI:
                         st.session_state.selected_table = None
                         st.rerun()
             
-            # Add refresh button
+            # Add refresh button (only for admins)
             with col2:
-                if st.session_state.active_connection_id and st.button("🔄 Refresh"):
+                if st.session_state.get('is_admin', False) and st.session_state.active_connection_id and st.button("🔄 Refresh"):
                     with st.spinner("Refreshing schema..."):
                         schema_config = self.db_manager.introspect_schema(st.session_state.active_connection_id)
                         if schema_config:
@@ -119,6 +126,7 @@ class SchemaEditorUI:
         st.subheader("Business Context")
         
         business_context = config.get("business_context", {})
+        logger.info(f"Initial business_context: {business_context}")
         
         # Business description
         new_desc = st.text_area(
@@ -127,6 +135,7 @@ class SchemaEditorUI:
             help="High-level description of the business context"
         )
         if new_desc != business_context.get("description", ""):
+            logger.info(f"Description changed to: {new_desc}")
             business_context["description"] = new_desc
             save_callback()
         
@@ -141,6 +150,7 @@ class SchemaEditorUI:
         
         new_concept_list = [c.strip() for c in new_concepts.split("\n") if c.strip()]
         if new_concept_list != business_context.get("key_concepts", []):
+            logger.info(f"Concepts changed to: {new_concept_list}")
             business_context["key_concepts"] = new_concept_list
             save_callback()
 
@@ -257,26 +267,36 @@ class SchemaEditorUI:
             return
         
         config = schema_config.get('config', {})
+        logger.info(f"Loaded config: {config}")
         modified = False
         
         def save_callback():
             nonlocal modified
             modified = True
+            logger.info("save_callback triggered")
         
-        # Create tabs for different sections
-        tab1, tab2, tab3 = st.tabs(["Business Context", "Query Guidelines", "Table Descriptions"])
-        
-        with tab1:
-            self.render_business_context(config, save_callback)
+        # Create tabs based on user role
+        is_admin = st.session_state.get('is_admin', False)
+        if is_admin:
+            tab1, tab2, tab3 = st.tabs(["Business Context", "Query Guidelines", "Table Descriptions"])
             
-        with tab2:
-            self.render_query_guidelines(config, save_callback)
-            
-        with tab3:
-            self.render_table_descriptions(config, save_callback)
+            with tab1:
+                self.render_business_context(config, save_callback)
+                
+            with tab2:
+                self.render_query_guidelines(config, save_callback)
+                
+            with tab3:
+                self.render_table_descriptions(config, save_callback)
+        else:
+            # Non-admin users only see Business Context
+            tab1 = st.tabs(["Business Context"])[0]
+            with tab1:
+                self.render_business_context(config, save_callback)
         
         # Save changes if modified
         if modified:
+            logger.info(f"Saving config: {config}")
             if self.db_manager.update_schema_config(
                 st.session_state.active_connection_id,
                 config

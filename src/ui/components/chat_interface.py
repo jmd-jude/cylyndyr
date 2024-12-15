@@ -21,14 +21,16 @@ class ChatInterfaceUI:
 
     def _handle_sql_generation(self, prompt: str) -> Union[pd.DataFrame, str]:
         """Handle SQL generation mode."""
-        with st.spinner("Generating SQL query..."):
+        with st.spinner("Working on it..."):
             schema_config = self.schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)
             query = generate_dynamic_query(prompt, config=schema_config.get('config') if schema_config else None)
         
-        with st.expander("Generated SQL"):
-            st.code(query, language='sql')
+        # Only show SQL to admin users
+        if st.session_state.get('is_admin', False):
+            with st.expander("Generated SQL"):
+                st.code(query, language='sql')
         
-        with st.spinner("Executing query..."):
+        with st.spinner("Almost there..."):
             result = execute_dynamic_query(query)
             
             st.session_state.chat_history.append({
@@ -90,8 +92,10 @@ class ChatInterfaceUI:
                         st.write("Analysis:")
                         st.write(interaction['result'])
                     else:
-                        st.write("SQL Query:")
-                        st.code(interaction['query'], language='sql')
+                        # Only show SQL in history to admin users
+                        if st.session_state.get('is_admin', False):
+                            st.write("SQL Query:")
+                            st.code(interaction['query'], language='sql')
                         st.write("Result:")
                         if isinstance(interaction['result'], pd.DataFrame):
                             st.dataframe(interaction['result'])

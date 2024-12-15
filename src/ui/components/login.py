@@ -1,8 +1,11 @@
 """Login UI component."""
 import streamlit as st
 import hashlib
+import logging
 from typing import Optional, Tuple
 from src.database.db_manager import DatabaseManager
+
+logger = logging.getLogger(__name__)
 
 class LoginUI:
     def __init__(self):
@@ -12,6 +15,8 @@ class LoginUI:
             st.session_state.user_id = None
         if 'username' not in st.session_state:
             st.session_state.username = None
+        if 'is_admin' not in st.session_state:
+            st.session_state.is_admin = False
             
         # Initialize database manager
         self.db_manager = DatabaseManager()
@@ -69,8 +74,12 @@ class LoginUI:
                     if login_email and login_password:
                         user_id = self.verify_user(login_email, login_password)
                         if user_id:
+                            user = self.db_manager.get_user(login_email)
+                            logger.info(f"User data from db: {user}")  # Log user data
                             st.session_state.user_id = user_id
                             st.session_state.username = login_email
+                            st.session_state.is_admin = user.get('is_admin', False)
+                            logger.info(f"Session state after login: user_id={st.session_state.user_id}, username={st.session_state.username}, is_admin={st.session_state.is_admin}")  # Log session state
                             st.rerun()
                         else:
                             st.error("Invalid email or password")
@@ -126,6 +135,10 @@ class LoginUI:
 
     def logout(self):
         """Log out user."""
+        logger.info("Logging out user")
+        logger.info(f"Session state before logout: user_id={st.session_state.user_id}, username={st.session_state.username}, is_admin={st.session_state.is_admin}")
         st.session_state.user_id = None
         st.session_state.username = None
+        st.session_state.is_admin = False  # Clear admin status
+        logger.info(f"Session state after logout: user_id={st.session_state.user_id}, username={st.session_state.username}, is_admin={st.session_state.is_admin}")
         st.rerun()

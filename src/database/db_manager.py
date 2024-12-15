@@ -200,7 +200,8 @@ class DatabaseManager:
                 return {
                     'id': user.id,
                     'username': user.email,
-                    'password_hash': user.password_hash
+                    'password_hash': user.password_hash,
+                    'is_admin': user.is_admin  # Add is_admin to the returned user data
                 }
             logger.info("User not found")
             return None
@@ -299,20 +300,8 @@ class DatabaseManager:
             
             if schema_config:
                 logger.info("Updating existing schema config")
-                # Preserve existing business context and query guidelines
-                existing_config = schema_config.config
-                new_config = {
-                    "base_schema": config["base_schema"],
-                    "business_context": existing_config.get("business_context", {
-                        "description": "",
-                        "key_concepts": [],
-                        "table_descriptions": {}
-                    }),
-                    "query_guidelines": existing_config.get("query_guidelines", {
-                        "optimization_rules": []
-                    })
-                }
-                schema_config.config = new_config
+                # Use the new config values directly
+                schema_config.config = config
                 schema_config.last_modified = datetime.utcnow()
             else:
                 logger.info("Creating new schema config")

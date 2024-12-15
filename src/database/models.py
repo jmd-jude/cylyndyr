@@ -1,6 +1,6 @@
 """Database models."""
 import os
-from sqlalchemy import create_engine, Column, String, DateTime, ForeignKey, JSON, Table, MetaData, UniqueConstraint
+from sqlalchemy import create_engine, Column, String, DateTime, ForeignKey, JSON, Table, MetaData, UniqueConstraint, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -20,6 +20,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login = Column(DateTime)
+    is_admin = Column(Boolean, default=False, nullable=False)  # New column for role-based access
     
     # Relationships
     connections = relationship("Connection", back_populates="user")
