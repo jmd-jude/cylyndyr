@@ -15,6 +15,8 @@ import sqlparse
 import streamlit as st
 from src.database.db_manager import DatabaseManager
 from src.utils.formatting import format_dataframe
+from uuid import uuid4
+import json
 
 # Load environment variables
 load_dotenv(override=True)
@@ -45,10 +47,30 @@ class QueryGenerator:
     def __init__(self):
         """Initialize with LLM client and load prompts."""
         self.llm = self._get_llm_client()
+        self.thread_id = str(uuid4())  # Generate unique thread ID for each instance
         self.memory = ConversationBufferMemory(return_messages=True)
-        self.analysis_memory = ConversationBufferMemory(return_messages=True)  # Separate memory for analysis
+        self.analysis_memory = ConversationBufferMemory(return_messages=True)
         with open('prompts.yaml', 'r') as file:
             self.prompts = yaml.safe_load(file)['prompts']['sql_generation']
+            
+        # Set up structured logging
+        self.logger = logging.getLogger('qa_chain')
+        self.logger.setLevel(logging.INFO)
+        
+        # Add JSON formatter for structured logging
+        json_handler = logging.FileHandler(f'logs/qa_chain_{datetime.now().strftime("%Y%m%d")}.json')
+        json_handler.setFormatter(logging.Formatter('%(message)s'))
+        self.logger.addHandler(json_handler)
+    
+    def _log_interaction(self, interaction_type: str, **kwargs):
+        """Log structured interaction data."""
+        log_entry = {
+            'timestamp': datetime.now().isoformat(),
+            'thread_id': self.thread_id,
+            'type': interaction_type,
+            **kwargs
+        }
+        self.logger.info(json.dumps(log_entry))
     
     def _get_llm_client(self):
         """Initialize LLM client based on configuration."""
@@ -134,7 +156,6 @@ class QueryGenerator:
         if not config or 'base_schema' not in config:
             return ""
         
-        # Start with business context if available
         context_parts = []
         if config.get('business_context', {}).get('description'):
             context_parts.append("Business Context:\n" + config['business_context']['description'])
@@ -142,25 +163,20 @@ class QueryGenerator:
         if config['business_context'].get('key_concepts'):
             context_parts.append("Key Business Concepts:\n- " + "\n- ".join(config['business_context']['key_concepts']))
         
-        # Add query guidelines if available
         if config.get('query_guidelines', {}).get('optimization_rules'):
             context_parts.append("Query Guidelines:\n- " + "\n- ".join(config['query_guidelines']['optimization_rules']))
         
-        # Add table and field information with business descriptions
         for table_name, table_info in config['base_schema']['tables'].items():
             table_parts = [f"Table: {table_name}"]
             
-            # Add table description if available
             table_desc = config.get('business_context', {}).get('table_descriptions', {}).get(table_name, {}).get('description')
             if table_desc:
                 table_parts.append(f"Description: {table_desc}")
             
-            # Add fields with their technical and business descriptions
             fields = []
             for field_name, field_info in table_info.get('fields', {}).items():
                 field_desc = [f"- {field_name} ({field_info['type']})"]
                 
-                # Add technical attributes
                 attributes = []
                 if field_info.get('primary_key'):
                     attributes.append("Primary Key")
@@ -171,7 +187,6 @@ class QueryGenerator:
                 if attributes:
                     field_desc.append(f"  ({', '.join(attributes)})")
                 
-                # Add business description if available
                 business_desc = (
                     config.get('business_context', {})
                     .get('table_descriptions', {})
@@ -228,20 +243,15 @@ class QueryGenerator:
     
     def _sanitize_sql(self, query: str) -> str:
         """Clean and format SQL query, ensuring only one statement."""
-        # Remove SQL code blocks if present
         query = re.sub(r'```sql|```', '', query)
         
-        # Find either WITH or SELECT statement
         match = re.search(r'\b(WITH|SELECT)\b.*', query, re.IGNORECASE | re.DOTALL)
         if not match:
             raise ValueError("No valid SQL query found in the response")
         
         query = match.group(0)
-        
-        # Remove any text after the last semicolon or after LIMIT clause
         query = re.split(r';|\s+(?=THIS|Let me|Note)', query)[0]
         
-        # Format the SQL
         formatted = sqlparse.format(
             query,
             reindent=True,
@@ -264,12 +274,59 @@ class QueryGenerator:
         
         messages = ChatPromptTemplate.from_template(prompt).format_messages(question=question)
         response = self.llm.invoke(messages)
+        generated_sql = self._sanitize_sql(response.content)
+        
+        # Log query generation
+        self._log_interaction(
+            'query_generation',
+            user_question=question,
+            generated_sql=generated_sql,
+            prompt_used=prompt
+        )
         
         if response and response.content:
             self.memory.chat_memory.add_user_message(question)
             self.memory.chat_memory.add_ai_message(response.content)
         
-        return self._sanitize_sql(response.content)
+        return generated_sql
+    
+    def execute_query(self, query: str) -> pd.DataFrame:
+        """Execute SQL query and return formatted results."""
+        conn = None
+        try:
+            conn = self._get_snowflake_connection()
+            cursor = conn.cursor()
+            cursor.execute(query)
+            
+            columns = [desc[0] for desc in cursor.description]
+            data = cursor.fetchall()
+            df = pd.DataFrame(data, columns=columns)
+            formatted_df = format_dataframe(df)
+            
+            # Log query execution with results
+            self._log_interaction(
+                'query_execution',
+                sql_query=query,
+                row_count=len(df),
+                column_count=len(df.columns),
+                columns=columns,
+                results_sample=formatted_df.head(5).to_dict('records'),
+                numeric_summary=formatted_df.describe().to_dict() if not df.empty else None
+            )
+            
+            return formatted_df
+            
+        except Exception as e:
+            # Log query execution error
+            self._log_interaction(
+                'query_error',
+                sql_query=query,
+                error=str(e)
+            )
+            raise
+        finally:
+            if conn:
+                conn.close()
     
     def analyze_result(self, df: pd.DataFrame, question: str, config=None) -> str:
         """Generate schema-aware analysis of query results."""
@@ -312,13 +369,21 @@ class QueryGenerator:
         - Resource requirements
         - Expected outcomes
         
-        Keep response concise and business-focused. Prioritize insights that drive action. Always end with "If you would like to discuss these findings further, toggle to 'Discussion Mode', above."
+        Keep response concise and business-focused. Prioritize insights that drive action.
         """
         
         response = self.llm.invoke([{"role": "user", "content": analysis_prompt}])
         
-        # Initialize analysis conversation with the first analysis
-        self.analysis_memory.clear()  # Clear previous analysis conversation
+        # Log analysis
+        self._log_interaction(
+            'analysis',
+            original_question=question,
+            analysis_response=response.content,
+            data_shape={'rows': len(df), 'columns': len(df.columns)}
+        )
+        
+        # Initialize analysis conversation
+        self.analysis_memory.clear()
         self.analysis_memory.chat_memory.add_user_message(question)
         self.analysis_memory.chat_memory.add_ai_message(response.content)
         
@@ -376,60 +441,33 @@ class QueryGenerator:
         - Suggest additional angles to explore
         - Identify data gaps if any
         - Recommend concrete actions
-        - When insights suggest valuable follow-up analysis, recommend specific queries:
-          "To investigate this further, switch to Query Mode and ask: '[natural language question]'"
-
-        GUIDANCE FOR SUGGESTING QUERIES:
-        - Suggest new queries when you identify:
-          * Patterns that deserve deeper investigation
-          * Gaps that available data could fill
-          * Assumptions that need validation
-          * Potential correlations worth exploring
-          * Unexpected trends that need context
-        - Frame suggested questions in natural language
-        - Focus on business impact and actionable insights
-        - Connect suggested queries to current findings
-
-        Maintain continuity with previous analysis while driving towards actionable conclusions.
-        If suggesting a new query, make it explicit and easy to act on.
         """
         
         response = self.llm.invoke([{"role": "user", "content": analysis_prompt}])
+        
+        # Log follow-up analysis
+        self._log_interaction(
+            'follow_up_analysis',
+            original_question=original_question,
+            follow_up_question=follow_up,
+            analysis_response=response.content,
+            data_shape={'rows': len(df), 'columns': len(df.columns)}
+        )
         
         # Add to analysis conversation history
         self.analysis_memory.chat_memory.add_user_message(follow_up)
         self.analysis_memory.chat_memory.add_ai_message(response.content)
         
         return response.content
-    
-    def execute_query(self, query: str) -> pd.DataFrame:
-        """Execute SQL query and return formatted results."""
-        conn = None
-        try:
-            conn = self._get_snowflake_connection()
-            cursor = conn.cursor()
-            cursor.execute(query)
-            
-            columns = [desc[0] for desc in cursor.description]
-            data = cursor.fetchall()
-            df = pd.DataFrame(data, columns=columns)
-            
-            return format_dataframe(df)
-            
-        except Exception as e:
-            logging.error(f"Error executing query: {str(e)}")
-            raise
-        finally:
-            if conn:
-                conn.close()
 
-# Initialize global query generator
-query_generator = QueryGenerator()
+# Initialize query generator
+def get_query_generator():
+    if 'query_generator' not in st.session_state:
+        st.session_state.query_generator = QueryGenerator()
+    return st.session_state.query_generator
 
 def generate_dynamic_query(question: str, config=None) -> str:
-    """Generate SQL query from natural language question."""
-    return query_generator.generate_query(question, config)
+    return get_query_generator().generate_query(question, config)
 
 def execute_dynamic_query(query: str, question: str = None) -> pd.DataFrame:
-    """Execute generated SQL query and return results."""
-    return query_generator.execute_query(query)
+    return get_query_generator().execute_query(query)

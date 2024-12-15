@@ -11,7 +11,7 @@ from src.ui.components.chat_interface import ChatInterfaceUI
 from src.ui.components.schema_editor import SchemaEditorUI
 from src.ui.components.login import LoginUI
 from src.database.db_manager import get_database_manager
-from src.langchain_components.qa_chain import query_generator
+from src.langchain_components.qa_chain import get_query_generator
 
 # Debug: Print environment at startup
 print("Environment variables at startup:")
@@ -122,7 +122,7 @@ def main():
                 if st.button("📊 Analyze This Result", key="analyze_button"):
                     with st.spinner("Thinking..."):
                         schema_config = schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)
-                        narrative = query_generator.analyze_result(
+                        narrative = get_query_generator.analyze_result(
                             st.session_state.current_results,
                             st.session_state.current_question,
                             config=schema_config.get('config') if schema_config else None

@@ -7,7 +7,7 @@ from typing import Union
 from src.langchain_components.qa_chain import (
     generate_dynamic_query,
     execute_dynamic_query,
-    query_generator
+    get_query_generator
 )
 
 class ChatInterfaceUI:
@@ -46,7 +46,7 @@ class ChatInterfaceUI:
         """Handle analysis conversation mode."""
         with st.spinner("Analyzing..."):
             schema_config = self.schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)
-            response = query_generator.continue_analysis(
+            response = get_query_generator.continue_analysis(
                 prompt,
                 st.session_state.current_results,
                 st.session_state.current_question,
