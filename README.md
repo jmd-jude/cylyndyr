@@ -50,6 +50,29 @@ When deploying to Streamlit Cloud, set the following secrets:
 - Business context for better query understanding
 - Support for Snowflake databases
 
+## Usage Tips
+
+### Handling Query Errors
+
+If you encounter an error when running a query, don't worry! The system has built-in error recovery:
+
+1. Simply ask it to try again with a message like:
+   - "Can you try that again?"
+   - "I got an error, can you fix it?"
+   - "That didn't work, please retry"
+
+2. The system will:
+   - Analyze the specific error
+   - Adjust the query accordingly
+   - Try again with the corrected version
+
+This retry capability is particularly helpful when:
+- Column names need adjustment
+- Table relationships need clarification
+- Data type conversions are required
+
+Most query issues can be resolved with a simple retry request, making the system more user-friendly for prototype testing.
+
 ## Development
 
 - Uses SQLite for local development

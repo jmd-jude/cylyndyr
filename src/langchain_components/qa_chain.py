@@ -57,6 +57,7 @@ class QueryGenerator:
         self.thread_id = str(uuid4())  # Generate unique thread ID for each instance
         self.memory = ConversationBufferMemory(return_messages=True)
         self.analysis_memory = ConversationBufferMemory(return_messages=True)
+        self.last_error = None  # Track the last query error
         with open('prompts.yaml', 'r') as file:
             self.prompts = yaml.safe_load(file)['prompts']['sql_generation']
             
@@ -179,8 +180,13 @@ class QueryGenerator:
         history = []
         for msg in messages[-7:]:  # Last 7 interactions
             if hasattr(msg, 'content') and isinstance(msg.content, str):
-                if "SELECT" in msg.content.upper():  # It's a SQL query
-                    history.append(f"Previous successful query: {msg.content}")
+                # Include all queries, not just SELECT statements
+                if any(keyword in msg.content.upper() for keyword in ['SELECT', 'WITH', 'INSERT', 'UPDATE', 'DELETE']):
+                    history.append(f"Previous query: {msg.content}")
+        
+        # Add error context if available
+        if self.last_error:
+            history.append(f"Previous error: {self.last_error}")
         
         return "\n".join(history) if history else ""
     
@@ -374,6 +380,9 @@ class QueryGenerator:
             df = pd.DataFrame(data, columns=columns)
             formatted_df = format_dataframe(df)
             
+            # Clear last error on successful query
+            self.last_error = None
+            
             # Log query execution with results
             self._log_interaction(
                 'query_execution',
@@ -388,6 +397,9 @@ class QueryGenerator:
             return formatted_df
             
         except Exception as e:
+            # Store the error for context in future queries
+            self.last_error = str(e)
+            
             # Log query execution error
             self._log_interaction(
                 'query_error',

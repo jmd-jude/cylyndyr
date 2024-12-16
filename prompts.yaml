@@ -15,6 +15,18 @@ prompts:
         2. Return only the SQL query, no explanations
         3. If using CTEs, must start with WITH keyword
 
+        ERROR HANDLING RULES:
+        1. If previous error mentions "column not found", verify column names against schema
+        2. If previous error mentions "relation/table not found", check table names and joins
+        3. If previous error mentions "data type mismatch", ensure proper type casting
+        4. If previous error mentions "ambiguous column", fully qualify column names
+        5. For syntax errors, verify Snowflake-specific syntax requirements
+        6. When retrying after an error:
+           - Address the specific error mentioned
+           - Maintain the original query intent
+           - Verify all table joins have proper conditions
+           - Double-check column name capitalization
+
         COMMON ANALYTICAL NEEDS:
         1. Time-based analysis: Use date trunc/parts for YoY, QoQ, MoM comparisons
         2. Cohort analysis: Group and compare customer/transaction segments
