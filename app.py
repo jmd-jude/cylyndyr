@@ -1,9 +1,12 @@
 """Main application entry point."""
 import os
-from dotenv import load_dotenv
-load_dotenv()  # Load environment variables first
-
 import streamlit as st
+
+# Load environment variables from .env file only in local development
+if not os.getenv('STREAMLIT_CLOUD'):
+    from dotenv import load_dotenv
+    load_dotenv()  # Load environment variables first
+
 import uuid
 from datetime import datetime
 import pandas as pd
