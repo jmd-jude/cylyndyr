@@ -417,33 +417,53 @@ class QueryGenerator:
         - Use "to" instead of dashes or other symbols for ranges
         - Express percentages as "X%" (e.g., "28%" not "28 percent")
         - Keep all words separate (e.g., "significantly above the mean" not "significantlyabovethemean")
-        
+
+        DATA VALIDATION STEP:
+        1. Review row count and structure
+        2. Note actual ranges for key metrics
+        3. Verify segment sizes and proportions
+        4. Cross-check any derived calculations
+
         Original Question: {question}{business_context}{field_context}
-        
+
         Data Summary:
         - Row Count: {len(df)}
         - Columns: {', '.join(df.columns)}
         - Numeric Summary: {df.describe().to_string() if not df.empty else 'No numeric data'}
 
-        RESPONSE FRAMEWORK:
-        1. Key Finding
-        - Lead with the most significant insight
-        - Quantify the impact or scale
-        - Highlight any unexpected patterns
+        ANALYSIS FRAMEWORK:
 
-        2. Business Implications
-        - Revenue/cost impact
+        1. Pattern Recognition
+        - Identify significant metric differences between segments/groups
+        - Note any surprising similarities or lack of variation
+        - Flag counter-intuitive findings
+        - Reference specific values from the data to support each observation
+
+        2. Key Findings (in order of business impact)
+        - Lead with the most statistically significant insight
+        - Quantify using actual values from the data
+        - Compare against relevant benchmarks
+        - Note where expected patterns are absent
+
+        3. Business Implications
+        - Revenue/cost impact (with supporting calculations)
         - Customer/market implications
         - Operational considerations
-        - Risk factors
+        - Risk factors and limitations of the analysis
 
-        3. Recommendations
-        - One primary action to take
-        - Quick wins vs strategic initiatives
+        4. Recommendations
+        - Primary action supported by the data
+        - Quick wins with clear metric targets
         - Resource requirements
-        - Expected outcomes
-        
-        Keep response concise and business-focused. Prioritize insights that drive action.
+        - Expected outcomes based on observed patterns
+
+        CRITICAL THINKING REQUIREMENTS:
+        - Question whether differences are meaningful
+        - Consider alternative interpretations
+        - Note where additional data would be valuable
+        - Highlight assumptions that need validation
+
+        Keep response concise and business-focused. Every insight must be directly supported by the data shown. When suggesting actions, connect them explicitly to patterns in the data. Always end with "Toggle to 'Discussion Mode' to probe and learn more."
         """
         
         response = self.llm.invoke([{"role": "user", "content": analysis_prompt}])
