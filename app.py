@@ -107,25 +107,25 @@ def main():
         # Mode selector using radio buttons
         mode = st.radio(
             "Mode",
-            ["Query", "Discussion"],
+            ["Data Query Mode", "Discussion Mode"],
             horizontal=True,
             index=1 if st.session_state.analysis_mode else 0,
             help="Switch between data queries and conversational analysis"
         )
         # Update analysis_mode based on selection
-        st.session_state.analysis_mode = (mode == "Discussion")
+        st.session_state.analysis_mode = (mode == "Discussion Mode")
         
         # Show current mode description
         if st.session_state.analysis_mode:
-            st.info("🔍 Analyze and discuss insights from your current results")
+            st.info("🔍 Analyze and generate actionable insights from your current results")
         else:
-            st.info("💬 Query your data and explore new questions")
+            st.info("💬 Query data and answer questions")
         
         # Analyze button in query mode
         if not st.session_state.analysis_mode:
             col1, _ = st.columns([3, 1])
             with col1:
-                if st.button("📊 Analyze This Result", key="analyze_button"):
+                if st.button("Explain This Result", key="analyze_button"):
                     with st.spinner("Thinking..."):
                         schema_config = schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)
                         narrative = get_query_generator().analyze_result(
