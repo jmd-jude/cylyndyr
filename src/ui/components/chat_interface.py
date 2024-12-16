@@ -115,7 +115,7 @@ class ChatInterfaceUI:
         
         # Update input placeholder based on mode
         placeholder = (
-            "Ask follow-up questions about the analysis..."
+            "What patterns or trends are you curious about?"
             if st.session_state.analysis_mode
             else "Ask a question about your data..."
         )
@@ -144,7 +144,7 @@ class ChatInterfaceUI:
         
         # Update subheader based on mode
         subheader = (
-            "Analyze & Explore Results"
+            "Explore Results"
             if st.session_state.analysis_mode
             else "Ask Questions, Get Answers"
         )

@@ -408,22 +408,9 @@ class QueryGenerator:
         field_context = self._get_field_context(df, config)
         
         analysis_prompt = f"""
-        You are a Business Strategy Advisor translating data into actionable insights.
+        You are a skilled SQL analyst explaining your query approach to a business user. They asked a question in plain English, and you want to help them understand how the resulting dataset answers their question.
 
-        FORMATTING REQUIREMENTS:
-        - Use plain text only - no special characters or mathematical symbols
-        - Maintain proper spacing between all words and numbers
-        - Format numbers with commas for thousands (e.g., "1,234" not "1234")
-        - Use "to" instead of dashes or other symbols for ranges
-        - Express percentages as "X%" (e.g., "28%" not "28 percent")
-        - Keep all words separate (e.g., "significantly above the mean" not "significantlyabovethemean")
-
-        DATA VALIDATION STEP:
-        1. Review row count and structure
-        2. Note actual ranges for key metrics
-        3. Verify segment sizes and proportions
-        4. Cross-check any derived calculations
-
+        CONTEXT:
         Original Question: {question}{business_context}{field_context}
 
         Data Summary:
@@ -431,39 +418,37 @@ class QueryGenerator:
         - Columns: {', '.join(df.columns)}
         - Numeric Summary: {df.describe().to_string() if not df.empty else 'No numeric data'}
 
-        ANALYSIS FRAMEWORK:
+        EXPLANATION FRAMEWORK:
 
-        1. Pattern Recognition
-        - Identify significant metric differences between segments/groups
-        - Note any surprising similarities or lack of variation
-        - Flag counter-intuitive findings
-        - Reference specific values from the data to support each observation
+        1. Query Overview
+        - Start with a plain-English summary of how you approached answering their question
+        - Explain why you chose to structure the data the way you did
+        - Highlight any clever or non-obvious ways you transformed the data to match their needs
 
-        2. Key Findings (in order of business impact)
-        - Lead with the most statistically significant insight
-        - Quantify using actual values from the data
-        - Compare against relevant benchmarks
-        - Note where expected patterns are absent
+        2. Data Pipeline Walkthrough
+        - Break down the major steps in how the data was assembled
+        - Explain any important data joins or combinations and why they were necessary
+        - Note any filtering, grouping, or aggregations that shaped the final result
+        - Describe any calculated fields and what they represent
 
-        3. Business Implications
-        - Revenue/cost impact (with supporting calculations)
-        - Customer/market implications
-        - Operational considerations
-        - Risk factors and limitations of the analysis
+        3. Result Structure
+        - Explain what each column in the result represents in business terms
+        - Clarify any potentially confusing aspects of how the data is organized
+        - Note if any data was deliberately excluded and why
+        - Highlight any assumptions made in how the data was structured
 
-        4. Recommendations
-        - Primary action supported by the data
-        - Quick wins with clear metric targets
-        - Resource requirements
-        - Expected outcomes based on observed patterns
+        4. Data Quality Context
+        - Note any important caveats about the data (e.g., time periods covered, excluded scenarios)
+        - Explain any null values or special cases in the results
+        - Mention any data transformations that might affect interpretation
 
-        CRITICAL THINKING REQUIREMENTS:
-        - Question whether differences are meaningful
-        - Consider alternative interpretations
-        - Note where additional data would be valuable
-        - Highlight assumptions that need validation
+        FORMATTING REQUIREMENTS:
+        - Use plain English, avoiding technical SQL terms unless necessary
+        - When technical terms are needed, explain them in business context
+        - Format numbers with commas for thousands (e.g., "1,234" not "1234")
+        - Express percentages as "X%" (e.g., "28%" not "28 percent")
 
-        Keep response concise and business-focused. Every insight must be directly supported by the data shown. When suggesting actions, connect them explicitly to patterns in the data. Always end with "Toggle to 'Discussion Mode' to probe and learn more."
+        Keep explanations focused on helping the user understand how their question was translated into data operations. Avoid analyzing the business implications - that will come later in the discussion mode. End with "Toggle to 'Discussion Mode' to explore what these results mean for your business."
         """
         
         response = self.llm.invoke([{"role": "user", "content": analysis_prompt}])

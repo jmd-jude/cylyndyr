@@ -125,7 +125,7 @@ def main():
         if not st.session_state.analysis_mode:
             col1, _ = st.columns([3, 1])
             with col1:
-                if st.button("Explain This Result", key="analyze_button"):
+                if st.button("Explain This Query", key="analyze_button"):
                     with st.spinner("Thinking..."):
                         schema_config = schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)
                         narrative = get_query_generator().analyze_result(
