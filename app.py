@@ -102,20 +102,26 @@ def main():
     # Main content area
     chat_interface.render()
     
-    # Show current mode indicator
-    if st.session_state.analysis_mode:
-        st.info("🔍 Discussion Mode: Uncover insights in the current results")
-    
-    # Add mode toggle and analyze button for current results
+    # Add mode selector and analyze button for current results
     if st.session_state.current_results is not None and st.session_state.chat_history:
-        # Mode toggle first
-        st.session_state.analysis_mode = st.toggle(
-            "Discussion Mode",
-            value=st.session_state.analysis_mode,
-            help="Toggle between data queries and conversational analysis"
+        # Mode selector using radio buttons
+        mode = st.radio(
+            "Mode",
+            ["Query", "Discussion"],
+            horizontal=True,
+            index=1 if st.session_state.analysis_mode else 0,
+            help="Switch between data queries and conversational analysis"
         )
+        # Update analysis_mode based on selection
+        st.session_state.analysis_mode = (mode == "Discussion")
         
-        # Then analyze button in its own column layout
+        # Show current mode description
+        if st.session_state.analysis_mode:
+            st.info("🔍 Analyze and discuss insights from your current results")
+        else:
+            st.info("💬 Query your data and explore new questions")
+        
+        # Analyze button in query mode
         if not st.session_state.analysis_mode:
             col1, _ = st.columns([3, 1])
             with col1:
