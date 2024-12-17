@@ -414,21 +414,37 @@ class QueryGenerator:
                 except Exception:
                     pass
     
-    def analyze_result(self, df: pd.DataFrame, question: str, config=None) -> str:
+    def analyze_result(self, df: pd.DataFrame, original_question: str, config=None) -> str:
         """Generate schema-aware analysis of query results."""
         business_context = self._get_business_context(config)
         field_context = self._get_field_context(df, config)
+
+        # Prepare data context based on size
+        if len(df) <= 100:
+            # For small result sets, include all data
+            data_context = f"""
+            Full Dataset ({len(df)} rows):
+            {df.to_dict('records')}
+            """
+        else:
+            # For larger sets, take a smart sample
+            sample_size = min(100, len(df) // 10)
+            sampled_df = df.sample(n=sample_size, random_state=42)  # Fixed random state for reproducibility
+            data_context = f"""
+            Sample Dataset ({sample_size} rows from total {len(df)}):
+            {sampled_df.to_dict('records')}
+            
+            Value Ranges:
+            {df.describe().to_dict()}
+            """
         
         analysis_prompt = f"""
         You are a skilled SQL analyst explaining your query approach to a business user. They asked a question in plain English, and you want to help them understand how the resulting dataset answers their question.
 
         CONTEXT:
-        Original Question: {question}{business_context}{field_context}
+        Original Question: {original_question}{business_context}{field_context}
 
-        Data Summary:
-        - Row Count: {len(df)}
-        - Columns: {', '.join(df.columns)}
-        - Numeric Summary: {df.describe().to_string() if not df.empty else 'No numeric data'}
+        {data_context}
 
         EXPLANATION FRAMEWORK:
 
@@ -468,14 +484,14 @@ class QueryGenerator:
         # Log analysis
         self._log_interaction(
             'analysis',
-            original_question=question,
+            original_question=original_question,
             analysis_response=response.content,
             data_shape={'rows': len(df), 'columns': len(df.columns)}
         )
         
         # Initialize analysis conversation
         self.analysis_memory.clear()
-        self.analysis_memory.chat_memory.add_user_message(question)
+        self.analysis_memory.chat_memory.add_user_message(original_question)
         self.analysis_memory.chat_memory.add_ai_message(response.content)
         
         return response.content
@@ -485,6 +501,25 @@ class QueryGenerator:
         business_context = self._get_business_context(config)
         field_context = self._get_field_context(df, config)
         conversation_history = self._format_analysis_history()
+        
+        # Prepare data context based on size (same as analyze_result)
+        if len(df) <= 100:
+            # For small result sets, include all data
+            data_context = f"""
+            Full Dataset ({len(df)} rows):
+            {df.to_dict('records')}
+            """
+        else:
+            # For larger sets, take a smart sample
+            sample_size = min(100, len(df) // 10)
+            sampled_df = df.sample(n=sample_size, random_state=42)  # Fixed random state for reproducibility
+            data_context = f"""
+            Sample Dataset ({sample_size} rows from total {len(df)}):
+            {sampled_df.to_dict('records')}
+            
+            Value Ranges:
+            {df.describe().to_dict()}
+            """
         
         analysis_prompt = f"""
         You are a Business Intelligence Advisor engaged in an ongoing data exploration.
@@ -506,10 +541,7 @@ class QueryGenerator:
         BUSINESS CONTEXT:
         {business_context}{field_context}
         
-        Data Summary:
-        - Row Count: {len(df)}
-        - Columns: {', '.join(df.columns)}
-        - Numeric Summary: {df.describe().to_string() if not df.empty else 'No numeric data'}
+        {data_context}
         
         RESPONSE APPROACH:
         0. Context Integration
