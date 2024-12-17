@@ -105,6 +105,8 @@ class SchemaEditorUI:
                         st.session_state.active_connection_id = connection_id
                         st.session_state.active_connection_name = selected_name
                         st.session_state.selected_table = None
+                        st.session_state.current_results = None
+                        st.session_state.current_question = None
                         st.rerun()
             
             # Add refresh button (only for admins)
