@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Natural Language Data Intelligence Platform</title>
+    <style>
+        :root {
+            --primary-color: #2374ab;
+            --secondary-color: #ff8c42;
+            --tertiary-color: #4cb944;
+            --quaternary-color: #8c4843;
+            --bg-color: #f9f9fb;
+            --text-color: #333333;
+            --heading-color: #1a1a2e;
+            --card-bg: #ffffff;
+            --border-color: #e0e0e0;
+            --highlight-color: #e6f2ff;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
+
+        /* Navigation */
+        nav {
+            background-color: #fff;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .logo {
+            font-weight: 700;
+            font-size: 1.25rem;
+            color: var(--primary-color);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .nav-link {
+            text-decoration: none;
+            color: var(--text-color);
+            font-weight: 500;
+            transition: color 0.2s;
+            position: relative;
+        }
+
+        .nav-link:hover {
+            color: var(--primary-color);
+        }
+
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 2px;
+            bottom: -4px;
+            left: 0;
+            background-color: var(--primary-color);
+            transition: width 0.2s;
+        }
+
+        .nav-link:hover::after {
+            width: 100%;
+        }
+
+        /* Hero Section */
+        .hero {
+            background: linear-gradient(135deg, #2374ab, #1a5c8a);
+            color: white;
+            padding: 5rem 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h60v60H0z' fill='none'/%3E%3Cpath d='M30 20v40M20 30h40' stroke='rgba(255,255,255,0.1)' stroke-width='1'/%3E%3C/svg%3E");
+            opacity: 0.3;
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            line-height: 1.2;
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            max-width: 700px;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+
+        .btn {
+            display: inline-block;
+            background-color: white;
+            color: var(--primary-color);
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-outline {
+            background-color: transparent;
+            border: 2px solid white;
+            color: white;
+            margin-left: 1rem;
+        }
+
+        .btn-outline:hover {
+            background-color: white;
+            color: var(--primary-color);
+        }
+
+        /* Section Styling */
+        section {
+            padding: 5rem 0;
+        }
+
+        .section-title {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .section-title h2 {
+            font-size: 2rem;
+            color: var(--heading-color);
+            position: relative;
+            display: inline-block;
+            margin-bottom: 1rem;
+        }
+
+        .section-title h2::after {
+            content: '';
+            position: absolute;
+            width: 60px;
+            height: 3px;
+            background-color: var(--primary-color);
+            left: 50%;
+            bottom: -10px;
+            transform: translateX(-50%);
+        }
+
+        .section-title p {
+            max-width: 700px;
+            margin: 0 auto;
+            color: #666;
+        }
+
+        /* Architecture Section */
+        .architecture {
+            background-color: white;
+        }
+
+        .architecture-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .architecture-category {
+            margin-bottom: 3rem;
+        }
+
+        .category-title {
+            color: var(--primary-color);
+            font-size: 1.4rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--primary-color);
+        }
+
+        .component-card {
+            background: var(--card-bg);
+            border-radius: 6px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            padding: 1.5rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+            height: 100%;
+            border-top: 4px solid;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .component-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .client-component {
+            border-color: var(--primary-color);
+        }
+
+        .platform-component {
+            border-color: var(--secondary-color);
+        }
+
+        .schema-component {
+            border-color: var(--tertiary-color);
+        }
+
+        .data-component {
+            border-color: var(--quaternary-color);
+        }
+
+        .component-card h4 {
+            font-size: 1.2rem;
+            margin-bottom: 0.75rem;
+            color: var(--heading-color);
+        }
+
+        .component-card p {
+            color: #666;
+            font-size: 0.95rem;
+            flex-grow: 1;
+        }
+
+        /* Architecture Diagram */
+        .architecture-diagram {
+            background-color: #f0f7ff;
+            border-radius: 10px;
+            padding: 40px 20px;
+            margin-bottom: 3rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .layer {
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        .layer-title {
+            text-align: center;
+            color: #555;
+            font-weight: 600;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+
+        .layer-container {
+            border: 2px solid;
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 20px;
+            background-color: rgba(255, 255, 255, 0.7);
+        }
+
+        .client-layer {
+            border-color: var(--primary-color);
+        }
+
+        .platform-layer {
+            border-color: var(--secondary-color);
+        }
+
+        .schema-layer {
+            border-color: var(--tertiary-color);
+        }
+
+        .data-layer {
+            border-color: var(--quaternary-color);
+        }
+
+        .component {
+            border-radius: 6px;
+            padding: 12px 15px;
+            text-align: center;
+            color: white;
+            font-weight: 500;
+            min-width: 150px;
+            max-width: 180px; /* Ensure boxes don't get too wide */
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 60px; /* Fixed height for uniform appearance */
+        }
+
+        .client-component {
+            background-color: var(--primary-color);
+        }
+
+        .platform-component {
+            background-color: var(--secondary-color);
+        }
+
+        .schema-component {
+            background-color: var(--tertiary-color);
+        }
+
+        .data-component {
+            background-color: var(--quaternary-color);
+        }
+
+        .component-text {
+            font-size: 0.95rem;
+            word-wrap: break-word;
+            hyphens: auto;
+        }
+
+        /* Vision Section */
+        .vision {
+            background-color: var(--bg-color);
+        }
+
+        .vision-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .vision-card {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s ease;
+        }
+
+        .vision-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .vision-card-header {
+            background: var(--primary-color);
+            color: white;
+            padding: 1.5rem;
+        }
+
+        .vision-card-header h3 {
+            font-size: 1.4rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .vision-card-body {
+            padding: 1.5rem;
+        }
+
+        .vision-card-body ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .vision-card-body li {
+            position: relative;
+            padding-left: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .vision-card-body li::before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            color: var(--primary-color);
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        /* Evolution Path */
+        .evolution {
+            background-color: white;
+        }
+
+        .timeline {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 3rem;
+            position: relative;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            top: 25px;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--primary-color);
+            z-index: 1;
+        }
+
+        .timeline-item {
+            flex: 1;
+            position: relative;
+            z-index: 2;
+            padding: 0 1rem;
+            text-align: center;
+        }
+
+        .timeline-dot {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            margin: 0 auto 1rem;
+        }
+
+        .timeline-content {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .timeline-content h4 {
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+        }
+
+        .timeline-content ul {
+            text-align: left;
+            padding-left: 1.5rem;
+        }
+
+        .timeline-content li {
+            margin-bottom: 0.5rem;
+        }
+
+        /* Features Section */
+        .features {
+            background-color: var(--bg-color);
+        }
+
+        .features-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .feature-card {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .feature-icon {
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--primary-color);
+            color: white;
+            font-size: 3rem;
+        }
+
+        .feature-content {
+            padding: 1.5rem;
+            flex-grow: 1;
+        }
+
+        .feature-content h3 {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            color: var(--heading-color);
+        }
+
+        .feature-content p {
+            color: #666;
+            font-size: 0.95rem;
+        }
+
+        /* Business Section */
+        .business {
+            background-color: white;
+        }
+
+        .business-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .business-card {
+            background: var(--highlight-color);
+            border-radius: 8px;
+            padding: 2rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .business-card h3 {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+        }
+
+        .business-card ul {
+            padding-left: 1.5rem;
+        }
+
+        .business-card li {
+            margin-bottom: 0.75rem;
+        }
+
+        /* Footer */
+        footer {
+            background-color: var(--heading-color);
+            color: white;
+            padding: 3rem 0;
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 2rem;
+        }
+
+        .footer-column {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .footer-column h3 {
+            font-size: 1.2rem;
+            margin-bottom: 1.5rem;
+            position: relative;
+            padding-bottom: 0.75rem;
+        }
+
+        .footer-column h3::after {
+            content: '';
+            position: absolute;
+            width: 40px;
+            height: 2px;
+            background-color: var(--primary-color);
+            left: 0;
+            bottom: 0;
+        }
+
+        .footer-column ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .footer-column li {
+            margin-bottom: 0.75rem;
+        }
+
+        .footer-column a {
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .footer-column a:hover {
+            color: white;
+        }
+
+        .copyright {
+            text-align: center;
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.9rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+
+            .hero h1 {
+                font-size: 2rem;
+            }
+
+            .timeline {
+                flex-direction: column;
+            }
+
+            .timeline::before {
+                top: 0;
+                bottom: 0;
+                left: 25px;
+                right: auto;
+                width: 4px;
+                height: auto;
+            }
+
+            .timeline-item {
+                margin-bottom: 2rem;
+                padding-left: 60px;
+                text-align: left;
+            }
+
+            .timeline-dot {
+                position: absolute;
+                left: 0;
+                top: 0;
+                margin: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="#" class="logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    <polyline points="7.5 4.21 12 6.81 16.5 4.21"></polyline>
+                    <polyline points="7.5 19.79 7.5 14.6 3 12"></polyline>
+                    <polyline points="21 12 16.5 14.6 16.5 19.79"></polyline>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+                NLDI Platform
+            </a>
+            <div class="nav-links">
+                <a href="#overview" class="nav-link">Overview</a>
+                <a href="#architecture" class="nav-link">Architecture</a>
+                <a href="#vision" class="nav-link">Vision</a>
+                <a href="#evolution" class="nav-link">Evolution</a>
+                <a href="#business" class="nav-link">Business</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="container hero-content">
+            <h1>Natural Language Data Intelligence Platform</h1>
+            <p>Democratizing data access through natural language processing, bridging the gap between human questions and data insights while maintaining enterprise-grade security and governance.</p>
+            <div>
+                <a href="#architecture" class="btn">Explore Architecture</a>
+                <a href="#vision" class="btn btn-outline">Learn Our Vision</a>
+            </div>
+        </div>
+    </section>
+
+    <section id="overview" class="overview">
+        <div class="container">
+            <div class="section-title">
+                <h2>Overview</h2>
+                <p>Our platform represents more than just a data layer query interface - it's the foundation for democratizing data access through natural language.</p>
+            </div>
+            <div class="vision-grid">
+                <div class="vision-card">
+                    <div class="vision-card-header">
+                        <h3>Natural Language Data Bridge</h3>
+                    </div>
+                    <div class="vision-card-body">
+                        <ul>
+                            <li>Transform natural language questions into accurate data insights</li>
+                            <li>Enable non-technical users to access data meaningfully</li>
+                            <li>Maintain data governance while expanding accessibility</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="vision-card">
+                    <div class="vision-card-header">
+                        <h3>Intelligent Learning System</h3>
+                    </div>
+                    <div class="vision-card-body">
+                        <ul>
+                            <li>Continuous improvement from user interactions</li>
+                            <li>Domain-aware query generation</li>
+                            <li>Result validation and quality assurance</li>
+                            <li>Cross-organization pattern recognition</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="architecture" class="architecture">
+        <div class="container">
+            <div class="section-title">
+                <h2>Platform Architecture</h2>
+                <p>A modular, scalable architecture designed for enterprise integration and extensibility</p>
+            </div>
+
+            <div class="architecture-diagram">
+                <!-- Client Layer -->
+                <div class="layer">
+                    <h3 class="layer-title">Client Layer</h3>
+                    <div class="layer-container client-layer">
+                        <div class="component client-component">
+                            <span class="component-text">Web UI</span>
+                        </div>
+                        <div class="component client-component">
+                            <span class="component-text">SDKs</span>
+                        </div>
+                        <div class="component client-component">
+                            <span class="component-text">API Clients</span>
+                        </div>
+                        <div class="component client-component">
+                            <span class="component-text">Embedded Widgets</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Platform Core Layer -->
+                <div class="layer">
+                    <h3 class="layer-title">Platform Core</h3>
+                    <div class="layer-container platform-layer">
+                        <div class="component platform-component">
+                            <span class="component-text">NLP</span>
+                        </div>
+                        <div class="component platform-component">
+                            <span class="component-text">Query Generation</span>
+                        </div>
+                        <div class="component platform-component">
+                            <span class="component-text">Result Validation</span>
+                        </div>
+                        <div class="component platform-component">
+                            <span class="component-text">Feedback Loop</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Schema Intelligence Layer -->
+                <div class="layer">
+                    <h3 class="layer-title">Schema Intelligence</h3>
+                    <div class="layer-container schema-layer">
+                        <div class="component schema-component">
+                            <span class="component-text">Schema Context</span>
+                        </div>
+                        <div class="component schema-component">
+                            <span class="component-text">Context Enrichment</span>
+                        </div>
+                        <div class="component schema-component">
+                            <span class="component-text">Version Control</span>
+                        </div>
+                        <div class="component schema-component">
+                            <span class="component-text">Knowledge Graph</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Data Layer -->
+                <div class="layer">
+                    <h3 class="layer-title">Data Layer</h3>
+                    <div class="layer-container data-layer">
+                        <div class="component data-component">
+                            <span class="component-text">Data Connectors</span>
+                        </div>
+                        <div class="component data-component">
+                            <span class="component-text">Connection Manager</span>
+                        </div>
+                        <div class="component data-component">
+                            <span class="component-text">Security/Auth</span>
+                        </div>
+                        <div class="component data-component">
+                            <span class="component-text">Data Sources</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-title" style="margin-top: 3rem;">
+                <h2>Key Features</h2>
+            </div>
+            <div class="architecture-grid">
+                <div class="component-card">
+                    <h4>Modular Architecture</h4>
+                    <ul style="margin-top: 1rem;">
+                        <li>Independent components</li>
+                        <li>Pluggable data sources</li>
+                        <li>Extensible processing pipeline</li>
+                    </ul>
+                </div>
+                <div class="component-card">
+                    <h4>Intelligent Processing</h4>
+                    <ul style="margin-top: 1rem;">
+                        <li>Multi-stage query generation</li>
+                        <li>Context-aware processing</li>
+                        <li>Learning feedback system</li>
+                    </ul>
+                </div>
+                <div class="component-card">
+                    <h4>Enterprise Ready</h4>
+                    <ul style="margin-top: 1rem;">
+                        <li>Scalable architecture</li>
+                        <li>Security focused</li>
+                        <li>Multi-tenant capable</li>
+                    </ul>
+                </div>
+                <div class="component-card">
+                    <h4>Integration Friendly</h4>
+                    <ul style="margin-top: 1rem;">
+                        <li>Multiple access patterns</li>
+                        <li>Standard protocols</li>
+                        <li>Flexible deployment options</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="vision" class="vision">
+        <div class="container">
+            <div class="section-title">
+                <h2>Strategic Vision</h2>
+                <p>Building a platform that democratizes data access through natural language</p>
+            </div>
+
+            <div class="vision-grid">
+                <div class="vision-card">
+                    <div class="vision-card-header">
+                        <h3>Core Value Proposition</h3>
+                    </div>
+                    <div class="vision-card-body">
+                        <p>Our platform serves as a natural language bridge to data while functioning as an intelligent learning system. It enables non-technical users to gain meaningful data insights while preserving governance structures.</p>
+                    </div>
+                </div>
+                <div class="vision-card">
+                    <div class="vision-card-header">
+                        <h3>Intellectual Property Value</h3>
+                    </div>
+                    <div class="vision-card-body">
+                        <p>The schema configuration system represents significant IP value by capturing and enhancing business context, improving through usage, and enabling better query generation.</p>
+                    </div>
+                </div>
+                <div class="vision-card">
+                    <div class="vision-card-header">
+                        <h3>Business Model Potential</h3>
+                    </div>
+                    <div class="vision-card-body">
+                        <ul>
+                            <li>Enterprise licensing with feature tiers</li>
+                            <li>Partner/OEM opportunities</li>
+                            <li>API-based usage models</li>
+                            <li>Value-based pricing aligned with customer success</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="evolution" class="evolution">
+        <div class="container">
+            <div class="section-title">
+                <h2>Technical Evolution Path</h2>
+                <p>A strategic roadmap for platform development and expansion</p>
+            </div>
+
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-dot">1</div>
+                    <div class="timeline-content">
+                        <h4>Current State</h4>
+                        <ul>
+                            <li>Snowflake-focused application</li>
+                            <li>Schema-aware query generation</li>
+                            <li>Business context integration</li>
+                            <li>Basic feedback loops</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot">2</div>
+                    <div class="timeline-content">
+                        <h4>Next Phase</h4>
+                        <ul>
+                            <li>Multi-source data connector framework</li>
+                            <li>Enhanced schema intelligence</li>
+                            <li>Advanced result validation</li>
+                            <li>Expanded context management</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot">3</div>
+                    <div class="timeline-content">
+                        <h4>Future Platform</h4>
+                        <ul>
+                            <li>API-first architecture</li>
+                            <li>Universal data source support</li>
+                            <li>Advanced AI processing pipeline</li>
+                            <li>Comprehensive feedback systems</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="features">
+        <div class="container">
+            <div class="section-title">
+                <h2>Platform Capabilities</h2>
+                <p>Designed for flexibility, intelligence, and enterprise integration</p>
+            </div>
+
+            <div class="features-container">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                            <line x1="8" y1="21" x2="16" y2="21"></line>
+                            <line x1="12" y1="17" x2="12" y2="21"></line>
+                        </svg>
+                    </div>
+                    <div class="feature-content">
+                        <h3>Integration Flexibility</h3>
+                        <p>Our API-first design supports multiple integration patterns, from direct API calls to embedded interfaces, allowing seamless integration into existing workflows and systems.</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path>
+                        </svg>
+                    </div>
+                    <div class="feature-content">
+                        <h3>Schema Intelligence</h3>
+                        <p>Our platform leverages automated structure discovery and context enrichment to understand not just the structure of your data, but its business meaning and relationships.</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="1 4 1 10 7 10"></polyline>
+                            <polyline points="23 20 23 14 17 14"></polyline>
+                            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path>
+                        </svg>
+                    </div>
+                    <div class="feature-content">
+                        <h3>Learning System</h3>
+                        <p>The platform continuously improves with usage, learning from user interactions to enhance query generation, optimize results, and build better contextual understanding.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="business" class="business">
+        <div class="container">
+            <div class="section-title">
+                <h2>Business Applications</h2>
+                <p>Delivering value across the enterprise</p>
+            </div>
+
+            <div class="business-grid">
+                <div class="business-card">
+                    <h3>Integration Opportunities</h3>
+                    <ul>
+                        <li>BI Tool Enhancement</li>
+                        <li>Custom Dashboard Integration</li>
+                        <li>Internal Data Tools</li>
+                        <li>Customer-Facing Analytics</li>
+                        <li>Enterprise Data Access</li>
+                    </ul>
+                </div>
+                <div class="business-card">
+                    <h3>Organizational Benefits</h3>
+                    <ul>
+                        <li>Democratized data access</li>
+                        <li>Reduced technical barriers</li>
+                        <li>Maintained governance</li>
+                        <li>Scalable data intelligence</li>
+                        <li>Enhanced data utilization</li>
+                    </ul>
+                </div>
+                <div class="business-card">
+                    <h3>Vision Summary</h3>
+                    <p>We're building more than a tool - we're creating a platform that democratizes data access while maintaining governance and quality. By enabling natural language data interaction anywhere, we're fundamentally changing how organizations leverage their data assets.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-column">
+                    <h3>Platform</h3>
+                    <ul>
+                        <li><a href="#overview">Overview</a></li>
+                        <li><a href="#architecture">Architecture</a></li>
+                        <li><a href="#vision">Strategic Vision</a></li>
+                        <li><a href="#evolution">Evolution Path</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h3>Components</h3>
+                    <ul>
+                        <li><a href="#">Client Layer</a></li>
+                        <li><a href="#">Platform Core</a></li>
+                        <li><a href="#">Schema Intelligence</a></li>
+                        <li><a href="#">Data Layer</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h3>Resources</h3>
+                    <ul>
+                        <li><a href="#">Documentation</a></li>
+                        <li><a href="#">API Reference</a></li>
+                        <li><a href="#">Developer Guide</a></li>
+                        <li><a href="#">Integration Examples</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h3>Contact</h3>
+                    <ul>
+                        <li><a href="#">Email Us</a></li>
+                        <li><a href="#">GitHub</a></li>
+                        <li><a href="#">Twitter</a></li>
+                        <li><a href="#">LinkedIn</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="copyright">
+                <p>&copy; 2025 Natural Language Data Intelligence Platform. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Smooth scrolling for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+    </script>
+</body>
+</html>
