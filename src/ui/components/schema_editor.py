@@ -30,12 +30,32 @@ class SchemaEditorUI:
             return
 
         with st.expander("➕ Add New Connection"):
+            # Authentication type selector OUTSIDE the form
+            auth_type = st.radio(
+                "Authentication Method",
+                ["password", "private_key"],
+                format_func=lambda x: "Password" if x == "password" else "Private Key",
+                help="Select authentication method for Snowflake connection"
+            )
+            
             # Connection form
             with st.form("add_connection_form"):
                 conn_name = st.text_input("Connection Name")
                 account = st.text_input("Account")
                 username = st.text_input("Username")
-                password = st.text_input("Password", type="password")
+                
+                # Show different fields based on auth type
+                if auth_type == "password":
+                    password = st.text_input("Password", type="password")
+                    private_key_path = None
+                else:
+                    password = None
+                    private_key_path = st.text_input(
+                        "Private Key Secret Name",
+                        help="Name of the Streamlit secret containing your private key (e.g., 'SNOWFLAKE_PRIVATE_KEY')",
+                        placeholder="SNOWFLAKE_PRIVATE_KEY"
+                    )
+                
                 warehouse = st.text_input("Warehouse")
                 database = st.text_input("Database")
                 schema = st.text_input("Schema")
@@ -43,7 +63,14 @@ class SchemaEditorUI:
                 # Submit button
                 submitted = st.form_submit_button("Add Connection")
                 if submitted:
-                    if not all([conn_name, account, username, password, warehouse, database, schema]):
+                    # Validation based on auth type
+                    required_fields = [conn_name, account, username, warehouse, database, schema]
+                    if auth_type == "password":
+                        required_fields.append(password)
+                    else:
+                        required_fields.append(private_key_path)
+                    
+                    if not all(required_fields):
                         st.warning("Please fill in all fields")
                         return
                         
@@ -54,11 +81,17 @@ class SchemaEditorUI:
                                 "type": "snowflake",
                                 "account": account,
                                 "username": username,
-                                "password": password,
                                 "warehouse": warehouse,
                                 "database": database,
-                                "schema": schema
+                                "schema": schema,
+                                "auth_type": auth_type
                             }
+                            
+                            # Add auth-specific fields
+                            if auth_type == "password":
+                                config["password"] = password
+                            else:
+                                config["private_key_path"] = private_key_path
                             
                             connection_id = self.db_manager.add_connection(
                                 st.session_state.user_id,

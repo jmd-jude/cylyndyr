@@ -25,6 +25,7 @@ venv/
 ENV/
 env/
 .env
+.env.example
 
 # IDE
 .idea/
@@ -47,6 +48,7 @@ logs/
 roadmap/
 /strategic_docs
 migrations/
+qa_chain_old.py
 
 # Secrets
 .streamlit/secrets.toml

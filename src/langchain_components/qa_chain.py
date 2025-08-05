@@ -50,7 +50,7 @@ def decimal_to_float(obj):
 
 class QueryGenerator:
     """Handles SQL query generation and execution."""
-    
+
     def __init__(self):
         """Initialize with LLM client and load prompts."""
         self.llm = self._get_llm_client()
@@ -60,20 +60,19 @@ class QueryGenerator:
         self.last_error = None  # Track the last query error
         with open('prompts.yaml', 'r') as file:
             self.prompts = yaml.safe_load(file)['prompts']['sql_generation']
-            
+
         # Set up structured logging
         self.logger = logging.getLogger('qa_chain')
         self.logger.setLevel(logging.INFO)
-        
         # Add JSON formatter for structured logging
         json_handler = logging.FileHandler(f'logs/qa_chain_{datetime.now().strftime("%Y%m%d")}.json')
         json_handler.setFormatter(logging.Formatter('%(message)s'))
         self.logger.addHandler(json_handler)
-    
+
     def _log_interaction(self, interaction_type: str, **kwargs):
         """Log structured interaction data to file and database."""
         current_time = datetime.now()
-        
+
         # Pre-process the kwargs to handle special types
         def json_safe_value(v):
             if isinstance(v, (datetime, date)):
@@ -81,7 +80,7 @@ class QueryGenerator:
             if isinstance(v, Decimal):
                 return float(v)
             return v
-        
+
         # Recursively process nested dictionaries and lists
         def process_payload(obj):
             if isinstance(obj, dict):
@@ -89,10 +88,12 @@ class QueryGenerator:
             elif isinstance(obj, list):
                 return [process_payload(i) for i in obj]
             return json_safe_value(obj)
-        
+
+        # Initialize snowflake_payload to ensure it exists
+        snowflake_payload = None
+
         # Process the kwargs
         processed_kwargs = process_payload(kwargs)
-        
         log_entry = {
             'timestamp': current_time.isoformat(),
             'thread_id': self.thread_id,
@@ -101,19 +102,17 @@ class QueryGenerator:
             'user_id': st.session_state.get('user_id'),
             **processed_kwargs
         }
-        
+
         # Keep existing file logging
         self.logger.info(json.dumps(log_entry))
-        
+
         # Add database logging
         conn = None
         try:
             conn = self._get_snowflake_connection()
             cursor = conn.cursor()
-            
             # Convert to object that Snowflake can handle
             snowflake_payload = json.dumps(log_entry)
-            
             cursor.execute(
                 """
                 INSERT INTO APP_METRICS.PUBLIC.LOG_INTERACTIONS 
@@ -143,22 +142,21 @@ class QueryGenerator:
                     conn.close()
                 except Exception:
                     pass
-    
+
     def _get_llm_client(self):
         """Initialize LLM client based on configuration."""
         try:
-            model = st.secrets["LLM_MODEL"]
-            temperature = float(st.secrets["LLM_TEMPERATURE"])
-            
+            model = os.getenv("LLM_MODEL") or st.secrets["LLM_MODEL"]
+            temperature = float(os.getenv("LLM_TEMPERATURE") or st.secrets["LLM_TEMPERATURE"])
             if "claude" in model.lower():
                 return ChatAnthropic(
-                    api_key=st.secrets["ANTHROPIC_API_KEY"],
+                    api_key=os.getenv("ANTHROPIC_API_KEY") or st.secrets["ANTHROPIC_API_KEY"],
                     model=model,
                     temperature=temperature
                 )
             else:
                 return ChatOpenAI(
-                    api_key=st.secrets["OPENAI_API_KEY"],
+                    api_key=os.getenv("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"],
                     model=model,
                     temperature=temperature
                 )
@@ -166,44 +164,39 @@ class QueryGenerator:
             logging.error(f"Error initializing LLM client: {str(e)}")
             # Fallback to OpenAI
             return ChatOpenAI(
-                api_key=st.secrets["OPENAI_API_KEY"],
+                api_key=os.getenv("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"],
                 model="gpt-3.5-turbo",
                 temperature=0
             )
-    
+
     def _format_chat_history(self, question: str) -> str:
         """Format chat history for context."""
         messages = self.memory.chat_memory.messages
         if not messages:
             return ""
-        
         history = []
         for msg in messages[-7:]:  # Last 7 interactions
             if hasattr(msg, 'content') and isinstance(msg.content, str):
                 # Include all queries, not just SELECT statements
                 if any(keyword in msg.content.upper() for keyword in ['SELECT', 'WITH', 'INSERT', 'UPDATE', 'DELETE']):
                     history.append(f"Previous query: {msg.content}")
-        
         # Add error context if available
         if self.last_error:
             history.append(f"Previous error: {self.last_error}")
-        
         return "\n".join(history) if history else ""
-    
+
     def _format_analysis_history(self) -> str:
         """Format analysis conversation history."""
         messages = self.analysis_memory.chat_memory.messages
         if not messages:
             return ""
-        
         history = []
         for msg in messages[-6:]:  # Last 6 interactions
             if hasattr(msg, 'content'):
                 role = "User" if msg.type == "human" else "Assistant"
                 history.append(f"{role}: {msg.content}")
-        
         return "\n".join(history) if history else ""
-    
+
     def _get_snowflake_connection(self):
         """Create Snowflake connection using active connection config."""
         db_manager = DatabaseManager()
@@ -213,47 +206,104 @@ class QueryGenerator:
             raise ValueError("No active connection found")
         
         conn_config = active_conn['config']
-        return snowflake.connector.connect(
-            account=conn_config['account'],
-            user=conn_config['username'],
-            password=conn_config['password'],
-            database=conn_config['database'],
-            warehouse=conn_config['warehouse'],
-            schema=conn_config['schema']
-        )
-    
+        
+        # Base connection parameters
+        connection_params = {
+            'account': conn_config['account'],
+            'user': conn_config['username'],
+            'database': conn_config['database'],
+            'warehouse': conn_config['warehouse'],
+            'schema': conn_config['schema']
+        }
+        
+        # Determine authentication method
+        auth_type = conn_config.get('auth_type', 'password')  # Default to password for backward compatibility
+        
+        if auth_type == 'private_key':
+            # Private key authentication
+            private_key_path = conn_config.get('private_key_path')
+            if not private_key_path:
+                raise ValueError("Private key path not specified in config")
+            
+            # Try to get private key from environment or secrets
+            try:
+                # First try environment variable
+                private_key_content = os.getenv(private_key_path)
+                
+                # If not found, try streamlit secrets
+                if not private_key_content:
+                    try:
+                        private_key_content = st.secrets[private_key_path]
+                    except Exception:
+                        pass
+                
+                # If still not found, treat as file path
+                if not private_key_content:
+                    if os.path.exists(private_key_path):
+                        with open(private_key_path, "rb") as key_file:
+                            private_key_content = key_file.read()
+                    else:
+                        raise ValueError(f"Private key not found: {private_key_path}")
+                
+                # If it's a string (from env/secrets), process it carefully
+                if isinstance(private_key_content, str):
+                    # Handle potential newline issues in environment variables
+                    private_key_content = private_key_content.replace('\\n', '\n')
+                    private_key_content = private_key_content.encode('utf-8')
+                
+                # Parse the private key using cryptography library
+                from cryptography.hazmat.primitives import serialization
+                from cryptography.hazmat.primitives.serialization import load_pem_private_key
+                
+                # Load the PEM private key
+                private_key_obj = load_pem_private_key(
+                    private_key_content,
+                    password=None  # We generated unencrypted key
+                )
+                
+                # Convert to DER format (binary) that Snowflake expects
+                private_key_der = private_key_obj.private_bytes(
+                    encoding=serialization.Encoding.DER,
+                    format=serialization.PrivateFormat.PKCS8,
+                    encryption_algorithm=serialization.NoEncryption()
+                )
+                
+                connection_params['private_key'] = private_key_der
+                
+            except Exception as e:
+                raise ValueError(f"Failed to load private key: {str(e)}")
+                
+        else:
+            # Password authentication (default)
+            connection_params['password'] = conn_config['password']
+        
+        return snowflake.connector.connect(**connection_params)
+
     def _get_table_list(self, config) -> str:
         """Get simple list of available tables."""
         if not config or 'base_schema' not in config:
             return "CUSTOMER, ORDERS, LINEITEM, PART, PARTSUPP, SUPPLIER, NATION, REGION"
         return ", ".join(config['base_schema']['tables'].keys())
-    
+
     def _get_schema_context(self, config) -> str:
         """Get relevant schema context for queries."""
         if not config or 'base_schema' not in config:
             return ""
-        
         context_parts = []
         if config.get('business_context', {}).get('description'):
             context_parts.append("Business Context:\n" + config['business_context']['description'])
-        
         if config['business_context'].get('key_concepts'):
             context_parts.append("Key Business Concepts:\n- " + "\n- ".join(config['business_context']['key_concepts']))
-        
         if config.get('query_guidelines', {}).get('optimization_rules'):
             context_parts.append("Query Guidelines:\n- " + "\n- ".join(config['query_guidelines']['optimization_rules']))
-        
         for table_name, table_info in config['base_schema']['tables'].items():
             table_parts = [f"Table: {table_name}"]
-            
             table_desc = config.get('business_context', {}).get('table_descriptions', {}).get(table_name, {}).get('description')
             if table_desc:
                 table_parts.append(f"Description: {table_desc}")
-            
             fields = []
             for field_name, field_info in table_info.get('fields', {}).items():
                 field_desc = [f"- {field_name} ({field_info['type']})"]
-                
                 attributes = []
                 if field_info.get('primary_key'):
                     attributes.append("Primary Key")
@@ -263,7 +313,6 @@ class QueryGenerator:
                     attributes.append("Optional")
                 if attributes:
                     field_desc.append(f"  ({', '.join(attributes)})")
-                
                 business_desc = (
                     config.get('business_context', {})
                     .get('table_descriptions', {})
@@ -274,33 +323,27 @@ class QueryGenerator:
                 )
                 if business_desc:
                     field_desc.append(f"  Description: {business_desc}")
-                
                 fields.append(" ".join(field_desc))
-            
             if fields:
                 table_parts.append("Fields:\n" + "\n".join(fields))
-            
             context_parts.append("\n".join(table_parts))
-        
         return "\n\n".join(context_parts)
-    
+
     def _get_business_context(self, config) -> str:
         """Extract business context from config."""
         if not config or not config.get('business_context'):
             return ""
-        
         context = ""
         if config['business_context'].get('description'):
             context += f"\nBusiness Context: {config['business_context']['description']}"
         if config['business_context'].get('key_concepts'):
             context += f"\nKey Concepts: {', '.join(config['business_context']['key_concepts'])}"
         return context
-    
+
     def _get_field_context(self, df: pd.DataFrame, config) -> str:
         """Extract field context for current columns."""
         if not config or not config.get('base_schema'):
             return ""
-        
         field_descriptions = []
         for table_info in config['base_schema']['tables'].values():
             for field_name, field_info in table_info.get('fields', {}).items():
@@ -315,20 +358,16 @@ class QueryGenerator:
                     )
                     if desc:
                         field_descriptions.append(f"{field_name}: {desc}")
-        
         return "\nField Descriptions:\n- " + "\n- ".join(field_descriptions) if field_descriptions else ""
-    
+
     def _sanitize_sql(self, query: str) -> str:
         """Clean and format SQL query, ensuring only one statement."""
         query = re.sub(r'```sql|```', '', query)
-        
         match = re.search(r'\b(WITH|SELECT)\b.*', query, re.IGNORECASE | re.DOTALL)
         if not match:
             raise ValueError("No valid SQL query found in the response")
-        
         query = match.group(0)
         query = re.split(r';|\s+(?=THIS|Let me|Note)', query)[0]
-        
         formatted = sqlparse.format(
             query,
             reindent=True,
@@ -338,7 +377,7 @@ class QueryGenerator:
             use_space_around_operators=True
         )
         return formatted.strip()
-    
+
     def generate_query(self, question: str, config=None) -> str:
         """Generate SQL query from natural language question."""
         prompt = self.prompts['template'].format(
@@ -348,11 +387,9 @@ class QueryGenerator:
             question=question,
             chat_history=self._format_chat_history(question)
         )
-        
         messages = ChatPromptTemplate.from_template(prompt).format_messages(question=question)
         response = self.llm.invoke(messages)
         generated_sql = self._sanitize_sql(response.content)
-        
         # Log query generation
         self._log_interaction(
             'query_generation',
@@ -360,13 +397,11 @@ class QueryGenerator:
             generated_sql=generated_sql,
             prompt_used=prompt
         )
-        
         if response and response.content:
             self.memory.chat_memory.add_user_message(question)
             self.memory.chat_memory.add_ai_message(response.content)
-        
         return generated_sql
-    
+
     def execute_query(self, query: str) -> pd.DataFrame:
         """Execute SQL query and return formatted results."""
         conn = None
@@ -374,15 +409,12 @@ class QueryGenerator:
             conn = self._get_snowflake_connection()
             cursor = conn.cursor()
             cursor.execute(query)
-            
             columns = [desc[0] for desc in cursor.description]
             data = cursor.fetchall()
             df = pd.DataFrame(data, columns=columns)
             formatted_df = format_dataframe(df)
-            
             # Clear last error on successful query
             self.last_error = None
-            
             # Log query execution with results
             self._log_interaction(
                 'query_execution',
@@ -393,13 +425,10 @@ class QueryGenerator:
                 results_sample=formatted_df.head(5).to_dict('records'),
                 numeric_summary=formatted_df.describe().to_dict() if not df.empty else None
             )
-            
             return formatted_df
-            
         except Exception as e:
             # Store the error for context in future queries
             self.last_error = str(e)
-            
             # Log query execution error
             self._log_interaction(
                 'query_error',
@@ -413,12 +442,11 @@ class QueryGenerator:
                     conn.close()
                 except Exception:
                     pass
-    
+
     def analyze_result(self, df: pd.DataFrame, original_question: str, config=None) -> str:
         """Generate schema-aware analysis of query results."""
         business_context = self._get_business_context(config)
         field_context = self._get_field_context(df, config)
-
         # Prepare data context based on size
         if len(df) <= 100:
             # For small result sets, include all data
@@ -433,54 +461,41 @@ class QueryGenerator:
             data_context = f"""
             Sample Dataset ({sample_size} rows from total {len(df)}):
             {sampled_df.to_dict('records')}
-            
             Value Ranges:
             {df.describe().to_dict()}
             """
-        
         analysis_prompt = f"""
         You are a skilled SQL analyst explaining your query approach to a business user. They asked a question in plain English, and you want to help them understand how the resulting dataset answers their question.
-
         CONTEXT:
         Original Question: {original_question}{business_context}{field_context}
-
         {data_context}
-
         EXPLANATION FRAMEWORK:
-
         1. Query Overview
         - Start with a plain-English summary of how you approached answering their question
         - Explain why you chose to structure the data the way you did
         - Highlight any clever or non-obvious ways you transformed the data to match their needs
-
         2. Data Pipeline Walkthrough
         - Break down the major steps in how the data was assembled
         - Explain any important data joins or combinations and why they were necessary
         - Note any filtering, grouping, or aggregations that shaped the final result
         - Describe any calculated fields and what they represent
-
         3. Result Structure
         - Explain what each column in the result represents in business terms
         - Clarify any potentially confusing aspects of how the data is organized
         - Note if any data was deliberately excluded and why
         - Highlight any assumptions made in how the data was structured
-
         4. Data Quality Context
         - Note any important caveats about the data (e.g., time periods covered, excluded scenarios)
         - Explain any null values or special cases in the results
         - Mention any data transformations that might affect interpretation
-
         FORMATTING REQUIREMENTS:
         - Use plain English, avoiding technical SQL terms unless necessary
         - When technical terms are needed, explain them in business context
         - Format numbers with commas for thousands (e.g., "1,234" not "1234")
         - Express percentages as "X%" (e.g., "28%" not "28 percent")
-
         Keep explanations focused on helping the user understand how their question was translated into data operations. Avoid analyzing the business implications - that will come later in the discussion mode. End with "Toggle to 'Discussion Mode' to explore what these results mean for your business."
         """
-        
         response = self.llm.invoke([{"role": "user", "content": analysis_prompt}])
-        
         # Log analysis
         self._log_interaction(
             'analysis',
@@ -488,20 +503,17 @@ class QueryGenerator:
             analysis_response=response.content,
             data_shape={'rows': len(df), 'columns': len(df.columns)}
         )
-        
         # Initialize analysis conversation
         self.analysis_memory.clear()
         self.analysis_memory.chat_memory.add_user_message(original_question)
         self.analysis_memory.chat_memory.add_ai_message(response.content)
-        
         return response.content
-    
+
     def continue_analysis(self, follow_up: str, df: pd.DataFrame, original_question: str, config=None) -> str:
         """Continue analysis conversation about the results."""
         business_context = self._get_business_context(config)
         field_context = self._get_field_context(df, config)
         conversation_history = self._format_analysis_history()
-        
         # Prepare data context based on size (same as analyze_result)
         if len(df) <= 100:
             # For small result sets, include all data
@@ -516,14 +528,11 @@ class QueryGenerator:
             data_context = f"""
             Sample Dataset ({sample_size} rows from total {len(df)}):
             {sampled_df.to_dict('records')}
-            
             Value Ranges:
             {df.describe().to_dict()}
             """
-        
         analysis_prompt = f"""
         You are a Business Intelligence Advisor engaged in an ongoing data exploration.
-
         FORMATTING REQUIREMENTS:
         - Use plain text only - no special characters or mathematical symbols
         - Maintain proper spacing between all words and numbers
@@ -531,43 +540,34 @@ class QueryGenerator:
         - Use "to" instead of dashes or other symbols for ranges
         - Express percentages as "X%" (e.g., "28%" not "28 percent")
         - Keep all words separate (e.g., "significantly above the mean" not "significantlyabovethemean")
-        
         CONVERSATION CONTEXT:
         Original Question: {original_question}
         Current Follow-up: {follow_up}
         Previous Discussion:
         {conversation_history}
-
         BUSINESS CONTEXT:
         {business_context}{field_context}
-        
         {data_context}
-        
         RESPONSE APPROACH:
         0. Context Integration
         - Connect current findings with previous observations
         - Highlight emerging patterns across analyses
         - Note any shifts in understanding
-
         1. Direct Answer
         - Address the specific follow-up question
         - Connect to previous insights
         - Highlight new findings
-
         2. Deeper Investigation
         - Explore underlying factors
         - Challenge assumptions
         - Identify correlations
         - Present an unexpected or non-obvious angle
-
         3. Next Steps
         - Suggest additional angles to explore
         - Identify data gaps if any
         - Recommend concrete actions
         """
-        
         response = self.llm.invoke([{"role": "user", "content": analysis_prompt}])
-        
         # Log follow-up analysis
         self._log_interaction(
             'follow_up_analysis',
@@ -576,12 +576,11 @@ class QueryGenerator:
             analysis_response=response.content,
             data_shape={'rows': len(df), 'columns': len(df.columns)}
         )
-        
         # Add to analysis conversation history
         self.analysis_memory.chat_memory.add_user_message(follow_up)
         self.analysis_memory.chat_memory.add_ai_message(response.content)
-        
         return response.content
+
 
 # Initialize query generator
 def get_query_generator():

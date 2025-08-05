@@ -12,6 +12,8 @@ from psycopg2.errors import UniqueViolation
 from .models import Base, User, Connection, SchemaConfig
 import snowflake.connector
 import traceback
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -55,20 +57,95 @@ class DatabaseManager:
 
     def _get_snowflake_connection(self, config: Dict) -> snowflake.connector.SnowflakeConnection:
         """Create Snowflake connection using connection config."""
+        # Mask sensitive info in logs
+        safe_config = {k: '***' if k in ['password', 'private_key_path'] else v 
+                    for k, v in config.items()}
         logger.info("Attempting to connect to Snowflake with config: " + 
-                   json.dumps({k: '***' if k == 'password' else v 
-                             for k, v in config.items()}, indent=2))
+                json.dumps(safe_config, indent=2))
+        
         try:
-            conn = snowflake.connector.connect(
-                account=config['account'],
-                user=config['username'],
-                password=config['password'],
-                database=config['database'],
-                warehouse=config['warehouse'],
-                schema=config['schema']
-            )
+            # Base connection parameters
+            connection_params = {
+                'account': config['account'],
+                'user': config['username'],
+                'database': config['database'],
+                'warehouse': config['warehouse'],
+                'schema': config['schema']
+            }
+            
+            # Determine authentication method
+            auth_type = config.get('auth_type', 'password')  # Default to password for backward compatibility
+            
+            if auth_type == 'private_key':
+                # Private key authentication
+                private_key_path = config.get('private_key_path')
+                if not private_key_path:
+                    raise ValueError("Private key path not specified in config")
+                
+                # Try to get private key from environment or secrets
+                try:
+                    # First try environment variable
+                    private_key_content = os.getenv(private_key_path)
+                    
+                    # If not found, try streamlit secrets
+                    if not private_key_content:
+                        try:
+                            private_key_content = st.secrets[private_key_path]
+                        except Exception:
+                            pass
+                    
+                    # If still not found, treat as file path
+                    if not private_key_content:
+                        if os.path.exists(private_key_path):
+                            with open(private_key_path, "rb") as key_file:
+                                private_key_content = key_file.read()
+                        else:
+                            raise ValueError(f"Private key not found: {private_key_path}")
+                    
+                    # If it's a string (from env/secrets), process it carefully
+                    if isinstance(private_key_content, str):
+                        # Handle potential newline issues in environment variables
+                        private_key_content = private_key_content.replace('\\n', '\n')
+                        private_key_content = private_key_content.encode('utf-8')
+                    
+                    logger.info(f"Private key content length: {len(private_key_content)} bytes")
+                    logger.info(f"Private key starts with: {str(private_key_content[:50])}")
+                    
+                    # Parse the private key using cryptography library
+                    from cryptography.hazmat.primitives import serialization
+                    from cryptography.hazmat.primitives.serialization import load_pem_private_key
+                    
+                    # Load the PEM private key
+                    private_key_obj = load_pem_private_key(
+                        private_key_content,
+                        password=None  # We generated unencrypted key
+                    )
+                    
+                    # Convert to DER format (binary) that Snowflake expects
+                    private_key_der = private_key_obj.private_bytes(
+                        encoding=serialization.Encoding.DER,
+                        format=serialization.PrivateFormat.PKCS8,
+                        encryption_algorithm=serialization.NoEncryption()
+                    )
+                    
+                    connection_params['private_key'] = private_key_der
+                    logger.info("Using private key authentication")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to load private key: {str(e)}")
+                    logger.error(f"Private key content preview: {str(private_key_content[:100]) if 'private_key_content' in locals() else 'Not loaded'}")
+                    raise ValueError(f"Failed to load private key: {str(e)}")
+                    
+            else:
+                # Password authentication (default)
+                connection_params['password'] = config['password']
+                logger.info("Using password authentication")
+            
+            # Create connection
+            conn = snowflake.connector.connect(**connection_params)
             logger.info("Successfully connected to Snowflake")
             return conn
+            
         except Exception as e:
             logger.error(f"Failed to connect to Snowflake: {str(e)}")
             logger.error(f"Full traceback: {traceback.format_exc()}")
@@ -93,16 +170,16 @@ class DatabaseManager:
                 cursor = conn.cursor()
                 
                 try:
-                    logger.info("Querying for tables")
-                    # Get table list
+                    logger.info("Querying for tables and views")
+                    # Get table list (includes both tables and views)
                     cursor.execute("""
                         SELECT table_name, table_type
                         FROM information_schema.tables
                         WHERE table_schema = CURRENT_SCHEMA()
-                        AND table_type = 'BASE TABLE'
+                        AND table_type IN ('BASE TABLE', 'VIEW')
                     """)
                     tables = cursor.fetchall()
-                    logger.info(f"Found tables: {[t[0] for t in tables]}")
+                    logger.info(f"Found tables/views: {[t[0] for t in tables]}")
                     
                     schema_config = {
                         "base_schema": {
@@ -118,7 +195,7 @@ class DatabaseManager:
                         }
                     }
                     
-                    # Get column information for each table
+                    # Get column information for each table/view
                     for table_name, _ in tables:
                         logger.info(f"Querying columns for table: {table_name}")
                         cursor.execute(f"""
