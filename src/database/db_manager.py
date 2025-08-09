@@ -152,7 +152,7 @@ class DatabaseManager:
             raise
 
     def introspect_schema(self, connection_id: str) -> Optional[Dict]:
-        """Query Snowflake metadata and build schema configuration."""
+        """Query Snowflake metadata and build v2 schema configuration."""
         try:
             logger.info(f"Starting schema introspection for connection: {connection_id}")
             
@@ -181,19 +181,43 @@ class DatabaseManager:
                     tables = cursor.fetchall()
                     logger.info(f"Found tables/views: {[t[0] for t in tables]}")
                     
+                    # Create v2 schema structure (much cleaner!)
                     schema_config = {
-                        "base_schema": {
-                            "tables": {}
-                        },
+                        "version": "2.0",
+                        "tables": {},
                         "business_context": {
                             "description": "",
-                            "key_concepts": [],
-                            "table_descriptions": {}
+                            "key_concepts": []
                         },
                         "query_guidelines": {
-                            "optimization_rules": []
+                            "optimization_rules": [
+                                "Always fully qualify column names with table aliases when multiple tables are involved in a query to avoid ambiguity.",
+                                "Include IS_DELETED = FALSE filter in WHERE clauses to ensure only active records are analyzed.",
+                                "When aggregating data, add appropriate GROUP BY clauses that include all non-aggregated columns in the SELECT statement."
+                            ]
                         }
                     }
+                    
+                    # Get primary key information (IMPROVED!)
+                    logger.info("Querying primary keys")
+                    cursor.execute("""
+                        SELECT 
+                            tc.table_name,
+                            kcu.column_name
+                        FROM information_schema.table_constraints tc
+                        JOIN information_schema.key_column_usage kcu 
+                            ON tc.constraint_name = kcu.constraint_name
+                            AND tc.table_schema = kcu.table_schema
+                        WHERE tc.table_schema = CURRENT_SCHEMA()
+                        AND tc.constraint_type = 'PRIMARY KEY'
+                    """)
+                    primary_keys = cursor.fetchall()
+                    pk_dict = {}
+                    for table_name, column_name in primary_keys:
+                        if table_name not in pk_dict:
+                            pk_dict[table_name] = set()
+                        pk_dict[table_name].add(column_name)
+                    logger.info(f"Found primary keys: {pk_dict}")
                     
                     # Get column information for each table/view
                     for table_name, _ in tables:
@@ -203,8 +227,7 @@ class DatabaseManager:
                                 column_name,
                                 data_type,
                                 is_nullable,
-                                column_default,
-                                is_identity
+                                column_default
                             FROM information_schema.columns
                             WHERE table_name = %s
                             AND table_schema = CURRENT_SCHEMA()
@@ -213,20 +236,23 @@ class DatabaseManager:
                         columns = cursor.fetchall()
                         logger.info(f"Found columns for {table_name}: {[c[0] for c in columns]}")
                         
-                        # Add table to schema
-                        schema_config["base_schema"]["tables"][table_name] = {
+                        # Add table to v2 schema (direct structure!)
+                        schema_config["tables"][table_name] = {
+                            "description": "",  # Will be filled by user
                             "fields": {}
                         }
                         
                         # Add columns to table
-                        for col_name, data_type, nullable, default, is_identity in columns:
-                            schema_config["base_schema"]["tables"][table_name]["fields"][col_name] = {
+                        table_pks = pk_dict.get(table_name, set())
+                        for col_name, data_type, nullable, default in columns:
+                            schema_config["tables"][table_name]["fields"][col_name] = {
                                 "type": data_type,
                                 "nullable": nullable == "YES",
-                                "primary_key": is_identity == "YES"
+                                "primary_key": col_name in table_pks,  # FIXED!
+                                "description": ""  # Will be filled by user
                             }
                     
-                    logger.info(f"Schema introspection successful. Config: {json.dumps(schema_config, indent=2)}")
+                    logger.info(f"Schema introspection successful. Created v2.0 config with {len(schema_config['tables'])} tables")
                     return schema_config
                     
                 finally:

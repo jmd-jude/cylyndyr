@@ -49,6 +49,8 @@ roadmap/
 /strategic_docs
 migrations/
 qa_chain_old.py
+migrate_schemas.py
+test_migration.py
 
 # Secrets
 .streamlit/secrets.toml

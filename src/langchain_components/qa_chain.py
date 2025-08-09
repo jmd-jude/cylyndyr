@@ -281,52 +281,113 @@ class QueryGenerator:
 
     def _get_table_list(self, config) -> str:
         """Get simple list of available tables."""
-        if not config or 'base_schema' not in config:
+        # Support both v1 and v2 format during transition
+        if config and config.get('version') == '2.0':
+            # v2 format - direct access
+            return ", ".join(config.get('tables', {}).keys())
+        elif config and 'base_schema' in config:
+            # v1 format - nested access
+            return ", ".join(config['base_schema']['tables'].keys())
+        else:
+            # Fallback
             return "CUSTOMER, ORDERS, LINEITEM, PART, PARTSUPP, SUPPLIER, NATION, REGION"
-        return ", ".join(config['base_schema']['tables'].keys())
 
     def _get_schema_context(self, config) -> str:
-        """Get relevant schema context for queries."""
-        if not config or 'base_schema' not in config:
+        """Get relevant schema context for queries - optimized for v2 format."""
+        if not config:
             return ""
+            
         context_parts = []
-        if config.get('business_context', {}).get('description'):
-            context_parts.append("Business Context:\n" + config['business_context']['description'])
-        if config['business_context'].get('key_concepts'):
-            context_parts.append("Key Business Concepts:\n- " + "\n- ".join(config['business_context']['key_concepts']))
-        if config.get('query_guidelines', {}).get('optimization_rules'):
-            context_parts.append("Query Guidelines:\n- " + "\n- ".join(config['query_guidelines']['optimization_rules']))
-        for table_name, table_info in config['base_schema']['tables'].items():
-            table_parts = [f"Table: {table_name}"]
-            table_desc = config.get('business_context', {}).get('table_descriptions', {}).get(table_name, {}).get('description')
-            if table_desc:
-                table_parts.append(f"Description: {table_desc}")
-            fields = []
-            for field_name, field_info in table_info.get('fields', {}).items():
-                field_desc = [f"- {field_name} ({field_info['type']})"]
-                attributes = []
-                if field_info.get('primary_key'):
-                    attributes.append("Primary Key")
-                if field_info.get('foreign_key'):
-                    attributes.append(f"Foreign Key -> {field_info['foreign_key']}")
-                if field_info.get('nullable'):
-                    attributes.append("Optional")
-                if attributes:
-                    field_desc.append(f"  ({', '.join(attributes)})")
-                business_desc = (
-                    config.get('business_context', {})
-                    .get('table_descriptions', {})
-                    .get(table_name, {})
-                    .get('fields', {})
-                    .get(field_name, {})
-                    .get('description')
-                )
-                if business_desc:
-                    field_desc.append(f"  Description: {business_desc}")
-                fields.append(" ".join(field_desc))
-            if fields:
-                table_parts.append("Fields:\n" + "\n".join(fields))
-            context_parts.append("\n".join(table_parts))
+        
+        # Handle business context
+        business_context = config.get('business_context', {})
+        if business_context.get('description'):
+            context_parts.append("Business Context:\n" + business_context['description'])
+        if business_context.get('key_concepts'):
+            context_parts.append("Key Business Concepts:\n- " + "\n- ".join(business_context['key_concepts']))
+        
+        # Handle query guidelines
+        query_guidelines = config.get('query_guidelines', {})
+        if query_guidelines.get('optimization_rules'):
+            context_parts.append("Query Guidelines:\n- " + "\n- ".join(query_guidelines['optimization_rules']))
+        
+        # Handle tables - optimized for v2 format
+        if config.get('version') == '2.0':
+            # v2 format - direct, efficient access
+            tables = config.get('tables', {})
+            for table_name, table_info in tables.items():
+                table_parts = [f"Table: {table_name}"]
+                
+                # Add table description if available
+                if table_info.get('description'):
+                    table_parts.append(f"Description: {table_info['description']}")
+                
+                # Process fields efficiently
+                fields = []
+                for field_name, field_info in table_info.get('fields', {}).items():
+                    field_desc = [f"- {field_name} ({field_info.get('type', 'TEXT')})"]
+                    
+                    # Add attributes
+                    attributes = []
+                    if field_info.get('primary_key'):
+                        attributes.append("Primary Key")
+                    if field_info.get('foreign_key'):
+                        attributes.append(f"Foreign Key -> {field_info['foreign_key']}")
+                    if field_info.get('nullable'):
+                        attributes.append("Optional")
+                    if attributes:
+                        field_desc.append(f"  ({', '.join(attributes)})")
+                    
+                    # Add business description
+                    if field_info.get('description'):
+                        field_desc.append(f"  Description: {field_info['description']}")
+                    
+                    fields.append(" ".join(field_desc))
+                
+                if fields:
+                    table_parts.append("Fields:\n" + "\n".join(fields))
+                
+                context_parts.append("\n".join(table_parts))
+        
+        else:
+            # v1 format - fallback to original logic
+            if not config.get('base_schema'):
+                return ""
+                
+            old_tables = config['base_schema']['tables']
+            old_table_descriptions = config.get('business_context', {}).get('table_descriptions', {})
+            
+            for table_name, table_info in old_tables.items():
+                table_parts = [f"Table: {table_name}"]
+                table_desc = old_table_descriptions.get(table_name, {}).get('description')
+                if table_desc:
+                    table_parts.append(f"Description: {table_desc}")
+                fields = []
+                for field_name, field_info in table_info.get('fields', {}).items():
+                    field_desc = [f"- {field_name} ({field_info['type']})"]
+                    attributes = []
+                    if field_info.get('primary_key'):
+                        attributes.append("Primary Key")
+                    if field_info.get('foreign_key'):
+                        attributes.append(f"Foreign Key -> {field_info['foreign_key']}")
+                    if field_info.get('nullable'):
+                        attributes.append("Optional")
+                    if attributes:
+                        field_desc.append(f"  ({', '.join(attributes)})")
+                    business_desc = (
+                        old_table_descriptions
+                        .get(table_name, {})
+                        .get('fields', {})
+                        .get(field_name, {})
+                        .get('description')
+                    )
+                    if business_desc:
+                        field_desc.append(f"  Description: {business_desc}")
+                    fields.append(" ".join(field_desc))
+                if fields:
+                    table_parts.append("Fields:\n" + "\n".join(fields))
+                context_parts.append("\n".join(table_parts))
+        
         return "\n\n".join(context_parts)
 
     def _get_business_context(self, config) -> str:
@@ -341,23 +402,37 @@ class QueryGenerator:
         return context
 
     def _get_field_context(self, df: pd.DataFrame, config) -> str:
-        """Extract field context for current columns."""
-        if not config or not config.get('base_schema'):
+        """Extract field context for current columns - optimized for v2."""
+        if not config:
             return ""
+            
         field_descriptions = []
-        for table_info in config['base_schema']['tables'].values():
-            for field_name, field_info in table_info.get('fields', {}).items():
-                if field_name in df.columns:
-                    desc = (
-                        config.get('business_context', {})
-                        .get('table_descriptions', {})
-                        .get(table_info.get('name', ''), {})
-                        .get('fields', {})
-                        .get(field_name, {})
-                        .get('description')
-                    )
-                    if desc:
-                        field_descriptions.append(f"{field_name}: {desc}")
+        
+        if config.get('version') == '2.0':
+            # v2 format - direct access
+            tables = config.get('tables', {})
+            for table_info in tables.values():
+                for field_name, field_info in table_info.get('fields', {}).items():
+                    if field_name in df.columns and field_info.get('description'):
+                        field_descriptions.append(f"{field_name}: {field_info['description']}")
+        else:
+            # v1 format - fallback to original logic
+            if not config.get('base_schema'):
+                return ""
+            for table_info in config['base_schema']['tables'].values():
+                for field_name, field_info in table_info.get('fields', {}).items():
+                    if field_name in df.columns:
+                        desc = (
+                            config.get('business_context', {})
+                            .get('table_descriptions', {})
+                            .get(table_info.get('name', ''), {})
+                            .get('fields', {})
+                            .get(field_name, {})
+                            .get('description')
+                        )
+                        if desc:
+                            field_descriptions.append(f"{field_name}: {desc}")
+        
         return "\nField Descriptions:\n- " + "\n- ".join(field_descriptions) if field_descriptions else ""
 
     def _sanitize_sql(self, query: str) -> str:
