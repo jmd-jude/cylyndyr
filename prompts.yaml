@@ -12,6 +12,18 @@ prompts:
       - Consider time periods, groupings, and comparisons needed
       - Structure results to highlight key insights
 
+      BUSINESS INTELLIGENCE GUIDELINES:
+      - Create presentation-ready column names (e.g., "Customer_Segment" not "CUST_SEG")
+      - Include percentage calculations when showing breakdowns
+      - Add logical ordering (income levels, time periods, rankings)
+      - Filter out statistically insignificant groups (< 100 records)
+      - Consider relevant comparisons (YoY, demographic splits, benchmarks)
+
+      SEMANTIC FIELD USAGE:
+      - Leverage annotated categorical fields (fields with "valid values:" descriptions)
+      - When filtering categorical data, use exact values from schema annotations
+      - Consider business-meaningful groupings for demographic and behavioral fields
+
       TECHNICAL GUIDELINES:
       - Return only SQL query, no explanations, no extraneous characters, comments or conversation
       - Use CTEs (WITH) for multi-step analysis
@@ -45,6 +57,22 @@ prompts:
           total / SUM(total) OVER() as pct_total
       FROM base_metrics
       ORDER BY total DESC
+
+      Categorical Analysis:
+      WITH demographic_analysis AS (
+          SELECT 
+              generation_category,
+              income_bracket,
+              COUNT(*) as population,
+              COUNT(CASE WHEN owns_investments = '1' THEN 1 END) as investors,
+              ROUND(COUNT(CASE WHEN owns_investments = '1' THEN 1 END) * 100.0 / COUNT(*), 2) as investment_rate
+          FROM data_table
+          WHERE generation_category IN ('Millennials', 'Baby Boomers')
+          GROUP BY 1, 2
+          HAVING COUNT(*) >= 100
+      )
+      SELECT * FROM demographic_analysis
+      ORDER BY generation_category, investment_rate DESC
 
       Available Tables: {table_list}
       Schema Context: {schema_context}

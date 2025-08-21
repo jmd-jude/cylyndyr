@@ -152,13 +152,17 @@ class QueryGenerator:
                 return ChatAnthropic(
                     api_key=os.getenv("ANTHROPIC_API_KEY") or st.secrets["ANTHROPIC_API_KEY"],
                     model=model,
-                    temperature=temperature
+                    temperature=temperature,
+                    max_tokens=int(os.getenv("LLM_MAX_TOKENS", "4096")),
+                    top_p=float(os.getenv("LLM_TOP_P", "1"))
                 )
             else:
                 return ChatOpenAI(
                     api_key=os.getenv("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"],
                     model=model,
-                    temperature=temperature
+                    temperature=temperature,
+                    max_tokens=int(os.getenv("LLM_MAX_TOKENS", "4096")),
+                    top_p=float(os.getenv("LLM_TOP_P", "1"))
                 )
         except Exception as e:
             logging.error(f"Error initializing LLM client: {str(e)}")
