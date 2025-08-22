@@ -40,6 +40,10 @@ class ChatInterfaceUI:
                 'result': result
             })
             
+            # Limit chat history to last 10 items
+            if len(st.session_state.chat_history) > 10:
+                st.session_state.chat_history = st.session_state.chat_history[-10:]
+            
             return result
 
     def _handle_analysis_conversation(self, prompt: str) -> str:
@@ -59,6 +63,10 @@ class ChatInterfaceUI:
                 'type': 'analysis',
                 'result': response
             })
+            
+            # Limit chat history to last 10 items
+            if len(st.session_state.chat_history) > 10:
+                st.session_state.chat_history = st.session_state.chat_history[-10:]
             
             return response
 
@@ -80,6 +88,7 @@ class ChatInterfaceUI:
                 st.session_state.current_results = None
                 st.session_state.current_question = None
                 st.session_state.analysis_mode = False  # Reset mode on clear
+                pass
                 st.rerun()
         
         if st.session_state.chat_history:

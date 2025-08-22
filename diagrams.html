@@ -1,0 +1,1316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Platform Diagrams</title>
+  <style>
+    /* Base Styles */
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      color: #333;
+      background-color: #f9f9f9;
+    }
+    
+    /* Navigation */
+    .nav-container {
+      background-color: #1E88E5;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+    .nav-wrapper {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+    .main-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo {
+      color: white;
+      font-weight: bold;
+      font-size: 1.5em;
+      padding: 15px 0;
+    }
+    .nav-links {
+      display: flex;
+    }
+    .nav-button {
+      background: none;
+      border: none;
+      color: white;
+      padding: 15px 20px;
+      font-size: 1em;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      font-family: inherit;
+    }
+    .nav-button:hover {
+      background-color: rgba(255,255,255,0.1);
+    }
+    .nav-button.active {
+      background-color: rgba(255,255,255,0.2);
+      font-weight: bold;
+    }
+    
+    /* Content Container */
+    .content-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    /* Page Sections */
+    .page-section {
+      display: none;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+      margin-bottom: 30px;
+      overflow: hidden;
+      padding: 30px;
+    }
+    .page-section.active {
+      display: block;
+    }
+    
+    /* Footer */
+    footer {
+      background-color: #333;
+      color: white;
+      text-align: center;
+      padding: 20px;
+      margin-top: 40px;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      .main-nav {
+        flex-direction: column;
+      }
+      .nav-links {
+        width: 100%;
+        justify-content: space-between;
+      }
+      .nav-button {
+        padding: 12px 10px;
+        font-size: 0.9em;
+      }
+    }
+    
+    /* Specific styles from original pages */
+    /* Architecture Diagram Styles */
+    .architecture {
+      display: flex;
+      flex-direction: column;
+      gap: 30px;
+    }
+    .layer {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .component {
+      background-color: #fff;
+      border: 2px solid #1E88E5;
+      border-radius: 8px;
+      padding: 15px;
+      flex-grow: 1;
+      flex-basis: 0;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      min-height: 100px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .component-title {
+      font-weight: bold;
+      font-size: 1.1em;
+      margin-bottom: 10px;
+      color: #1E88E5;
+      text-align: center;
+    }
+    .component-content {
+      font-size: 0.9em;
+      flex-grow: 1;
+    }
+    .component-list {
+      padding-left: 20px;
+      margin: 5px 0;
+    }
+    .connection-line {
+      height: 30px;
+      border-left: 2px dashed #1E88E5;
+      margin-left: 50%;
+    }
+    .connection-point {
+      width: 10px;
+      height: 10px;
+      background-color: #1E88E5;
+      border-radius: 50%;
+      margin: 0 auto;
+    }
+    .layer-title {
+      background-color: #E3F2FD;
+      color: #1E88E5;
+      text-align: center;
+      padding: 10px;
+      border-radius: 8px;
+      font-weight: bold;
+      margin-bottom: 15px;
+    }
+    .data-flow {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background-color: #4CAF50;
+      color: white;
+      font-size: 12px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+    }
+    .feature-badge {
+      position: absolute;
+      top: -10px;
+      right: -5px;
+      background-color: #FF9800;
+      color: white;
+      font-size: 0.7em;
+      padding: 3px 8px;
+      border-radius: 15px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      z-index: 10;
+    }
+    .component {
+      position: relative;
+      padding-top: 20px; /* Add extra padding at the top to accommodate badges */
+    }
+    .note {
+      background-color: #FFFDE7;
+      border-left: 4px solid #FFC107;
+      padding: 10px 15px;
+      margin: 20px 0;
+      font-size: 0.9em;
+    }
+    
+    /* Flow Summary Styles */
+    .flow-diagram {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 40px 0;
+    }
+    .main-flow {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 50px;
+    }
+    .process-box {
+      width: 22%;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    .process-title {
+      font-weight: bold;
+      font-size: 1.1em;
+      margin-bottom: 10px;
+    }
+    .process-description {
+      font-size: 0.85em;
+      line-height: 1.4;
+    }
+    .box-user-input {
+      background-color: #E3F2FD;
+      border: 2px solid #1E88E5;
+    }
+    .box-ai-reasoning {
+      background-color: #F3E5F5;
+      border: 2px solid #9C27B0;
+    }
+    .box-execution {
+      background-color: #E0F7FA;
+      border: 2px solid #00BCD4;
+    }
+    .box-results {
+      background-color: #FFF8E1;
+      border: 2px solid #FFC107;
+    }
+    .arrow {
+      flex-grow: 0;
+      width: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #757575;
+    }
+    .decision-diamonds {
+      display: flex;
+      justify-content: space-around;
+      width: 80%;
+      margin-bottom: 30px;
+    }
+    .decision {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 40%;
+    }
+    .diamond {
+      width: 100px;
+      height: 100px;
+      background-color: white;
+      border: 2px solid #757575;
+      transform: rotate(45deg);
+      margin-bottom: 40px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .diamond-text {
+      transform: rotate(-45deg);
+      text-align: center;
+      font-weight: bold;
+      font-size: 0.9em;
+      color: #424242;
+    }
+    .decision-path {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 20px;
+    }
+    .path-label {
+      padding: 5px 15px;
+      border-radius: 15px;
+      font-weight: bold;
+      font-size: 0.9em;
+    }
+    .path-no {
+      color: #9C27B0;
+    }
+    .path-yes {
+      color: #9C27B0;
+    }
+    .path-empty {
+      color: #00BCD4;
+    }
+    .path-success {
+      color: #00BCD4;
+    }
+    .vertical-line {
+      width: 2px;
+      height: 50px;
+      background-color: #757575;
+      margin: 0 auto;
+    }
+    .refinement-boxes {
+      display: flex;
+      justify-content: space-around;
+      width: 80%;
+    }
+    .refinement-box {
+      width: 40%;
+      padding: 15px;
+      border-radius: 8px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .refine-sql {
+      background-color: #F3E5F5;
+      border: 2px solid #9C27B0;
+    }
+    .adjust-filters {
+      background-color: #E0F7FA;
+      border: 2px solid #00BCD4;
+    }
+    .refinement-title {
+      font-weight: bold;
+      font-size: 1em;
+      margin-bottom: 5px;
+      display: flex;
+      align-items: center;
+    }
+    .refresh-icon {
+      display: inline-block;
+      margin-right: 8px;
+      font-size: 1.2em;
+    }
+    .return-text {
+      font-size: 0.8em;
+      margin-top: 15px;
+      color: #616161;
+      font-style: italic;
+    }
+    .guardrails {
+      margin-top: 60px;
+    }
+    .guardrails-title {
+      font-weight: bold;
+      font-size: 1.2em;
+      margin-bottom: 20px;
+      color: #424242;
+      text-align: center;
+    }
+    .guardrail-boxes {
+      display: flex;
+      justify-content: space-between;
+    }
+    .guardrail-box {
+      width: 31%;
+      padding: 15px;
+      background-color: #FFEBEE;
+      border: 2px solid #E57373;
+      border-radius: 8px;
+    }
+    .guardrail-title {
+      font-weight: bold;
+      color: #D32F2F;
+      margin-bottom: 10px;
+      font-size: 0.95em;
+    }
+    .guardrail-description {
+      font-size: 0.85em;
+      color: #424242;
+    }
+    .icon {
+      font-size: 2em;
+      margin-bottom: 10px;
+      color: #757575;
+    }
+    
+    /* Flow Detail Styles */
+    .flow-container {
+      position: relative;
+      margin: 50px 0;
+    }
+    .flow-step {
+      position: relative;
+      background-color: white;
+      border: 2px solid #1976D2;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 40px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    .flow-step-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    .step-number {
+      background-color: #1976D2;
+      color: white;
+      font-weight: bold;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 15px;
+      flex-shrink: 0;
+    }
+    .step-title {
+      font-weight: bold;
+      font-size: 1.2em;
+      color: #1976D2;
+      flex-grow: 1;
+    }
+    .flow-content {
+      padding-left: 45px;
+    }
+    .flow-arrow {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      height: 40px;
+      width: 30px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .arrow-line {
+      width: 2px;
+      flex-grow: 1;
+      background-color: #1976D2;
+    }
+    .arrow-head {
+      width: 0;
+      height: 0;
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-top: 10px solid #1976D2;
+    }
+    .decision-point {
+      background-color: #E3F2FD;
+      border: 2px dashed #1976D2;
+      border-radius: 8px;
+      padding: 15px;
+      margin: 15px 0;
+      position: relative;
+    }
+    .decision-header {
+      font-weight: bold;
+      color: #1976D2;
+      margin-bottom: 10px;
+    }
+    .decision-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    .decision-option {
+      background-color: white;
+      border: 1px solid #1976D2;
+      border-radius: 20px;
+      padding: 8px 15px;
+      font-size: 0.9em;
+      display: flex;
+      align-items: center;
+    }
+    .option-arrow {
+      color: #1976D2;
+      margin-left: 5px;
+      font-weight: bold;
+    }
+    .data-flow-detail {
+      background-color: #FFF8E1;
+      border-left: 4px solid #FFC107;
+      padding: 10px 15px;
+      margin: 15px 0;
+      font-size: 0.9em;
+    }
+    .data-flow-title {
+      font-weight: bold;
+      color: #F57C00;
+      margin-bottom: 5px;
+    }
+    .user-action {
+      background-color: #E8F5E9;
+      border-left: 4px solid #4CAF50;
+      padding: 10px 15px;
+      margin: 15px 0;
+      font-size: 0.9em;
+    }
+    .user-action-title {
+      font-weight: bold;
+      color: #388E3C;
+      margin-bottom: 5px;
+    }
+    .system-action {
+      background-color: #E3F2FD;
+      border-left: 4px solid #2196F3;
+      padding: 10px 15px;
+      margin: 15px 0;
+      font-size: 0.9em;
+    }
+    .system-action-title {
+      font-weight: bold;
+      color: #1976D2;
+      margin-bottom: 5px;
+    }
+    .note-box {
+      background-color: #FFFDE7;
+      border: 1px solid #FFC107;
+      border-radius: 8px;
+      padding: 15px;
+      margin: 30px 0;
+      font-size: 0.9em;
+    }
+    .refinement-loop {
+      display: flex;
+      align-items: flex-start;
+      margin: 20px 0;
+    }
+    .loop-arrow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px;
+    }
+    .loop-icon {
+      color: #F57C00;
+      font-size: 24px;
+      margin-bottom: 5px;
+    }
+    .loop-text {
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      transform: rotate(180deg);
+      color: #F57C00;
+      font-weight: bold;
+      font-size: 0.8em;
+      text-transform: uppercase;
+    }
+    .loop-content {
+      flex-grow: 1;
+      border: 2px dashed #F57C00;
+      border-radius: 8px;
+      padding: 15px;
+      background-color: #FFF8E1;
+    }
+    .two-column {
+      display: flex;
+      gap: 30px;
+      margin: 20px 0;
+    }
+    .column {
+      flex: 1;
+    }
+    
+    /* Responsive adjustments for diagrams */
+    @media (max-width: 992px) {
+      .layer {
+        flex-direction: column;
+      }
+      .main-flow {
+        flex-direction: column;
+        align-items: center;
+      }
+      .process-box {
+        width: 80%;
+        margin-bottom: 20px;
+      }
+      .arrow {
+        transform: rotate(90deg);
+        margin: 10px 0;
+        height: 30px;
+      }
+      .decision-diamonds {
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+      }
+      .decision {
+        width: 80%;
+        margin-bottom: 40px;
+      }
+      .refinement-boxes {
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+      }
+      .refinement-box {
+        width: 80%;
+        margin-bottom: 20px;
+      }
+      .guardrail-boxes {
+        flex-direction: column;
+      }
+      .guardrail-box {
+        width: auto;
+        margin-bottom: 15px;
+      }
+      .two-column {
+        flex-direction: column;
+      }
+    }
+    
+    /* Page title styles */
+    .page-title {
+      color: #1E88E5;
+      text-align: center;
+      margin: 30px 0;
+    }
+    .page-subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 40px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation Bar -->
+  <div class="nav-container">
+    <div class="nav-wrapper">
+      <nav class="main-nav">
+        <div class="logo">Platform Description</div>
+        <div class="nav-links">
+          <button class="nav-button active" onclick="showPage('flow-summary')">Core Flow</button>
+          <button class="nav-button" onclick="showPage('flow-detail')">User Journey</button>
+          <button class="nav-button" onclick="showPage('architecture')">Architecture</button>
+        </div>
+      </nav>
+    </div>
+  </div>
+  
+  <div class="content-container">
+    <!-- Architecture Diagram Section -->
+    <section id="architecture" class="page-section">
+      <h1 class="page-title">Natural Language Data Analysis & Exploration Platform</h1>
+      
+      <div class="note">
+        This architecture diagram illustrates the core components of the platform. Each component is intended to work together to enable natural language data exploration without requiring SQL knowledge.
+      </div>
+      
+      <div class="architecture">
+        <!-- User Interface Layer -->
+        <div>
+          <div class="layer-title">User Interface Layer</div>
+          <div class="layer">
+            <div class="component">
+              <div class="feature-badge">Core</div>
+              <div class="component-title">Chat Interface</div>
+              <div class="component-content">
+                <ul class="component-list">
+                  <li>Natural language question input</li>
+                  <li>Query/Analysis toggle mode</li>
+                  <li>Result visualization</li>
+                  <li>Context-aware follow-ups</li>
+                </ul>
+              </div>
+            </div>
+            <div class="component">
+              <div class="component-title">Authentication</div>
+              <div class="component-content">
+                <ul class="component-list">
+                  <li>User login and registration</li>
+                  <li>Role-based access control</li>
+                  <li>Admin/Standard user privileges</li>
+                </ul>
+              </div>
+            </div>
+            <div class="component">
+              <div class="component-title">Connection Management</div>
+              <div class="component-content">
+                <ul class="component-list">
+                  <li>Database connection selector</li>
+                  <li>Connection configuration</li>
+                  <li>Secure credential handling</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="connection-line"></div>
+        <div class="connection-point"></div>
+        
+        <!-- Application Logic Layer -->
+        <div>
+          <div class="layer-title">Application Logic Layer</div>
+          <div class="layer">
+            <div class="component">
+              <div class="feature-badge">AI</div>
+              <div class="component-title">Natural Language Processing</div>
+              <div class="component-content">
+                <ul class="component-list">
+                  <li>Question interpretation</li>
+                  <li>SQL generation with context</li>
+                  <li>Result explanation</li>
+                  <li>Business insight generation</li>
+                </ul>
+              </div>
+            </div>
+            <div class="component">
+              <div class="component-title">Schema Management</div>
+              <div class="component-content">
+                <ul class="component-list">
+                  <li>Automatic schema introspection</li>
+                  <li>Business context enrichment</li>
+                  <li>Table &amp; field descriptions</li>
+                  <li>Query optimization rules</li>
+                </ul>
+              </div>
+            </div>
+            <div class="component">
+              <div class="component-title">Session Management</div>
+              <div class="component-content">
+                <ul class="component-list">
+                  <li>Query history tracking</li>
+                  <li>Conversation context</li>
+                  <li>Mode state management</li>
+                  <li>User preferences</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="connection-line"></div>
+        <div class="connection-point"></div>
+        
+        <!-- Data Service Layer -->
+        <div>
+          <div class="layer-title">Data Service Layer</div>
+          <div class="layer">
+            <div class="component">
+              <div class="component-title">Query Execution Engine</div>
+              <div class="component-content">
+                <ul class="component-list">
+                  <li>SQL optimization</li>
+                  <li>Query execution</li>
+                  <li>Error handling</li>
+                  <li>Performance monitoring</li>
+                </ul>
+              </div>
+            </div>
+            <div class="component">
+              <div class="feature-badge">Core</div>
+              <div class="component-title">Data Formatter</div>
+              <div class="component-content">
+                <ul class="component-list">
+                  <li>Result formatting</li>
+                  <li>Type detection</li>
+                  <li>Data visualization</li>
+                  <li>Export capabilities</li>
+                </ul>
+              </div>
+            </div>
+            <div class="component">
+              <div class="component-title">Query Logger</div>
+              <div class="component-content">
+                <ul class="component-list">
+                  <li>Interaction logging</li>
+                  <li>Performance metrics</li>
+                  <li>Error tracking</li>
+                  <li>Usage analytics</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="connection-line"></div>
+        <div class="connection-point"></div>
+        
+        <!-- Integration Layer -->
+        <div>
+          <div class="layer-title">Integration Layer</div>
+          <div class="layer">
+            <div class="component">
+              <div class="component-title">LLM API Integration</div>
+              <div class="component-content">
+                <ul class="component-list">
+                  <li>OpenAI/Anthropic client</li>
+                  <li>Prompt management</li>
+                  <li>Response handling</li>
+                  <li>Fallback strategies</li>
+                </ul>
+              </div>
+            </div>
+            <div class="component">
+              <div class="feature-badge">Core</div>
+              <div class="component-title">Database Connectors</div>
+              <div class="component-content">
+                <ul class="component-list">
+                  <li>Snowflake connection</li>
+                  <li>Credential management</li>
+                  <li>Connection pooling</li>
+                  <li>Query transmission</li>
+                </ul>
+              </div>
+            </div>
+            <div class="component">
+              <div class="component-title">Authentication Service</div>
+              <div class="component-content">
+                <ul class="component-list">
+                  <li>Password hashing</li>
+                  <li>Session management</li>
+                  <li>Role verification</li>
+                  <li>Access control</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="connection-line"></div>
+        <div class="connection-point"></div>
+        
+        <!-- Data Storage Layer -->
+        <div>
+          <div class="layer-title">Data Storage Layer</div>
+          <div class="layer">
+            <div class="component">
+              <div class="component-title">System Database</div>
+              <div class="component-content">
+                <ul class="component-list">
+                  <li>User accounts</li>
+                  <li>Connection configurations</li>
+                  <li>Schema metadata</li>
+                  <li>System logs</li>
+                </ul>
+              </div>
+            </div>
+            <div class="component">
+              <div class="component-title">Analytics Warehouse</div>
+              <div class="component-content">
+                <ul class="component-list">
+                  <li>Usage metrics</li>
+                  <li>Query performance</li>
+                  <li>Error statistics</li>
+                  <li>User behavior analytics</li>
+                </ul>
+              </div>
+            </div>
+            <div class="component">
+              <div class="feature-badge">External</div>
+              <div class="component-title">Snowflake Database</div>
+              <div class="component-content">
+                <ul class="component-list">
+                  <li>Business data sources</li>
+                  <li>Customer-managed</li>
+                  <li>Data warehouse tables</li>
+                  <li>Scale-out compute</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="note" style="margin-top: 40px;">
+        <strong>Key Engineering Considerations:</strong>
+        <ul>
+          <li>Natural language processing requires precise prompt engineering for accurate SQL generation</li>
+          <li>Database schema enrichment is critical for contextual understanding of business data</li>
+          <li>User experience should seamlessly transition between data querying and insightful analysis</li>
+          <li>Security and permission models must be robust for handling sensitive business data</li>
+          <li>Architecture should support extension to additional database types beyond Snowflake to drive future growth</li>
+        </ul>
+      </div>
+    </section>
+    
+    <!-- Flow Summary Section -->
+    <section id="flow-summary" class="page-section active">
+      <h1 class="page-title">Core Reasoning Flow</h1>
+      <div class="page-subtitle">Natural Language to Data Insights Processing Pipeline</div>
+      
+      <div class="flow-diagram">
+        <!-- Main Process Flow -->
+        <div class="main-flow">
+          <!-- User Input Box -->
+          <div class="process-box box-user-input">
+            <div class="icon">👤</div>
+            <div class="process-title">User Input</div>
+            <div class="process-description">Natural language question from non-technical user</div>
+          </div>
+          
+          <!-- Arrow -->
+          <div class="arrow">→</div>
+          
+          <!-- AI Reasoning Box -->
+          <div class="process-box box-ai-reasoning">
+            <div class="icon">🧠</div>
+            <div class="process-title">AI Reasoning</div>
+            <div class="process-description">Intent recognition + Schema-aware SQL generation</div>
+          </div>
+          
+          <!-- Arrow -->
+          <div class="arrow">→</div>
+          
+          <!-- Secure Execution Box -->
+          <div class="process-box box-execution">
+            <div class="icon">🔒</div>
+            <div class="process-title">Secure Execution</div>
+            <div class="process-description">Run SQL with guardrails and access controls</div>
+          </div>
+          
+          <!-- Arrow -->
+          <div class="arrow">→</div>
+          
+          <!-- Formatted Results Box -->
+          <div class="process-box box-results">
+            <div class="icon">📊</div>
+            <div class="process-title">Formatted Results</div>
+            <div class="process-description">Clean, well-formatted output with optional follow-ups</div>
+          </div>
+        </div>
+        
+        <!-- Decision Diamonds -->
+        <div class="decision-diamonds">
+          <!-- Valid SQL Decision -->
+          <div class="decision">
+            <div class="diamond">
+              <div class="diamond-text">Valid SQL?</div>
+            </div>
+            
+            <!-- Decision Paths -->
+            <div class="decision-path">
+              <div class="path-label path-no">No ↓</div>
+              <div class="path-label path-yes">Yes →</div>
+            </div>
+          </div>
+          
+          <!-- Results Decision -->
+          <div class="decision">
+            <div class="diamond">
+              <div class="diamond-text">Results?</div>
+            </div>
+            
+            <!-- Decision Paths -->
+            <div class="decision-path">
+              <div class="path-label path-empty">Empty ↓</div>
+              <div class="path-label path-success">Success →</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Vertical Lines -->
+        <div class="vertical-line"></div>
+        
+        <!-- Refinement Boxes -->
+        <div class="refinement-boxes">
+          <!-- Refine SQL Generation -->
+          <div class="refinement-box refine-sql">
+            <div class="refinement-title">
+              <span class="refresh-icon">↻</span> Refine SQL Generation
+            </div>
+            <div class="return-text">↑ Returns to AI Reasoning</div>
+          </div>
+          
+          <!-- Auto-adjust Query Filters -->
+          <div class="refinement-box adjust-filters">
+            <div class="refinement-title">
+              <span class="refresh-icon">↻</span> Auto-adjust Query Filters
+            </div>
+            <div class="return-text">↑ Returns to Secure Execution</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Guardrails Section -->
+      <div class="guardrails">
+        <div class="guardrails-title">Key Guardrails Throughout</div>
+        
+        <div class="guardrail-boxes">
+          <!-- Authentication & Authorization -->
+          <div class="guardrail-box">
+            <div class="guardrail-title">Authentication & Authorization</div>
+            <div class="guardrail-description">Schema filtering based on user access rights</div>
+          </div>
+          
+          <!-- Contextual Boundaries -->
+          <div class="guardrail-box">
+            <div class="guardrail-title">Contextual Boundaries</div>
+            <div class="guardrail-description">Follow-ups limited to current result context</div>
+          </div>
+          
+          <!-- Transparent Processing -->
+          <div class="guardrail-box">
+            <div class="guardrail-title">Transparent Processing</div>
+            <div class="guardrail-description">SQL visible to users for verification</div>
+          </div>
+        </div>
+      </div>
+    </section>
+    
+    <!-- Flow Detail Section -->
+    <section id="flow-detail" class="page-section">
+      <h1 class="page-title">User & Data Flow Diagram</h1>
+      <div class="page-subtitle">Natural Language Data Exploration Journey</div>
+      
+      <div class="flow-container">
+        <!-- Step 1: User Authentication -->
+        <div class="flow-step">
+          <div class="flow-step-header">
+            <div class="step-number">1</div>
+            <div class="step-title">User Authentication</div>
+          </div>
+          <div class="flow-content">
+            <div class="user-action">
+              <div class="user-action-title">User Action</div>
+              <p>User logs in with email/password credentials or creates a new account.</p>
+            </div>
+            
+            <div class="system-action">
+              <div class="system-action-title">System Action</div>
+              <p>System authenticates user and determines role permissions (admin vs. standard).</p>
+            </div>
+            
+            <div class="data-flow-detail">
+              <div class="data-flow-title">Data Flow</div>
+              <p>User credentials → Authentication service → Role information → Session state</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="flow-arrow">
+          <div class="arrow-line"></div>
+          <div class="arrow-head"></div>
+        </div>
+        
+        <!-- Step 2: Connection Selection -->
+        <div class="flow-step">
+          <div class="flow-step-header">
+            <div class="step-number">2</div>
+            <div class="step-title">Data Connection Selection</div>
+          </div>
+          <div class="flow-content">
+            <div class="decision-point">
+              <div class="decision-header">Decision Point: Connection Management</div>
+              <p>User must select an existing connection or create a new one (admin only).</p>
+              <div class="decision-options">
+                <div class="decision-option">Select existing connection <span class="option-arrow">→</span></div>
+                <div class="decision-option">Add new connection (Admin only) <span class="option-arrow">→</span></div>
+              </div>
+            </div>
+            
+            <div class="system-action">
+              <div class="system-action-title">System Action</div>
+              <p>System loads connection configuration and authorized schema information.</p>
+            </div>
+            
+            <div class="data-flow-detail">
+              <div class="data-flow-title">Data Flow</div>
+              <p>Connection selection → Schema introspection → Database metadata → Business context enrichment</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="flow-arrow">
+          <div class="arrow-line"></div>
+          <div class="arrow-head"></div>
+        </div>
+        
+        <!-- Step 3: Natural Language Query -->
+        <div class="flow-step">
+          <div class="flow-step-header">
+            <div class="step-number">3</div>
+            <div class="step-title">Natural Language Query</div>
+          </div>
+          <div class="flow-content">
+            <div class="user-action">
+              <div class="user-action-title">User Action</div>
+              <p>User enters a business question in everyday language (e.g., "What were our top 10 customers by revenue last quarter?")</p>
+            </div>
+            
+            <div class="system-action">
+              <div class="system-action-title">System Action: AI Reasoning</div>
+              <p>System interprets user intent and constructs a schema-aware query plan.</p>
+            </div>
+            
+            <div class="data-flow-detail">
+              <div class="data-flow-title">Data Flow: Prompt Construction</div>
+              <p>User question → Chat memory → Schema context → LLM processing → SQL generation</p>
+            </div>
+            
+            <div class="refinement-loop">
+              <div class="loop-arrow">
+                <div class="loop-icon">↻</div>
+                <div class="loop-text">Refinement Loop</div>
+              </div>
+              <div class="loop-content">
+                <div class="system-action-title">Auto-Refinement Process (Future)</div>
+                <p>If the generated SQL is invalid or returns no results, system automatically refines and retries:</p>
+                <ol>
+                  <li><strong>Error Detection:</strong> Identifies syntax errors or execution failures</li>
+                  <li><strong>Query Adjustment:</strong> Reformulates query with additional context</li>
+                  <li><strong>Filter Refinement:</strong> Adjusts overly restrictive filters if results are empty</li>
+                  <li><strong>Schema Alignment:</strong> Ensures query matches available table structure</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="flow-arrow">
+          <div class="arrow-line"></div>
+          <div class="arrow-head"></div>
+        </div>
+        
+        <!-- Step 4: Query Execution -->
+        <div class="flow-step">
+          <div class="flow-step-header">
+            <div class="step-number">4</div>
+            <div class="step-title">Secure Query Execution</div>
+          </div>
+          <div class="flow-content">
+            <div class="system-action">
+              <div class="system-action-title">System Action</div>
+              <p>System executes the generated SQL against the connected database with user's authorized access level.</p>
+            </div>
+            
+            <div class="data-flow-detail">
+              <div class="data-flow-title">Data Flow</div>
+              <p>Generated SQL → Connection manager → Database execution → Raw result set → Result formatting</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="flow-arrow">
+          <div class="arrow-line"></div>
+          <div class="arrow-head"></div>
+        </div>
+        
+        <!-- Step 5: Result Presentation -->
+        <div class="flow-step">
+          <div class="flow-step-header">
+            <div class="step-number">5</div>
+            <div class="step-title">Result Presentation</div>
+          </div>
+          <div class="flow-content">
+            <div class="system-action">
+              <div class="system-action-title">System Action</div>
+              <p>System presents formatted query results as interactive data tables with appropriate formatting.</p>
+            </div>
+            
+            <div class="user-action">
+              <div class="user-action-title">User Action</div>
+              <p>User reviews the results and can explore the data table directly.</p>
+            </div>
+            
+            <div class="decision-point">
+              <div class="decision-header">Decision Point: Analysis Options</div>
+              <p>User chooses how to proceed with the results.</p>
+              <div class="decision-options">
+                <div class="decision-option">Explain This Query <span class="option-arrow">→</span></div>
+                <div class="decision-option">Switch to Discussion Mode <span class="option-arrow">→</span></div>
+                <div class="decision-option">Ask a new question <span class="option-arrow">→</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="flow-arrow">
+          <div class="arrow-line"></div>
+          <div class="arrow-head"></div>
+        </div>
+        
+        <!-- Step 6: Analysis Modes -->
+        <div class="flow-step">
+          <div class="flow-step-header">
+            <div class="step-number">6</div>
+            <div class="step-title">Insight Generation</div>
+          </div>
+          <div class="flow-content">
+            <div class="two-column">
+              <div class="column">
+                <div class="system-action">
+                  <div class="system-action-title">Query Explanation Mode</div>
+                  <p>System explains how the user's question was translated into data operations using business terminology.</p>
+                  <ul>
+                    <li>Query overview in plain English</li>
+                    <li>Data pipeline walkthrough</li>
+                    <li>Result structure explanation</li>
+                    <li>Data quality context</li>
+                  </ul>
+                </div>
+              </div>
+              <div class="column">
+                <div class="system-action">
+                  <div class="system-action-title">Discussion Mode</div>
+                  <p>System enables conversational analysis about the current result set without new database queries.</p>
+                  <ul>
+                    <li>Statistical insights from current data</li>
+                    <li>Pattern identification</li>
+                    <li>Business implications</li>
+                    <li>Follow-up question handling</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            
+            <div class="user-action">
+              <div class="user-action-title">User Action</div>
+              <p>User asks follow-up questions about the data or switches back to query mode for new questions.</p>
+            </div>
+            
+            <div class="data-flow-detail">
+              <div class="data-flow-title">Data Flow: Discussion Mode</div>
+              <p>Result set → Statistical summary → Original question context → Analysis memory → Insight generation</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="flow-arrow">
+          <div class="arrow-line"></div>
+          <div class="arrow-head"></div>
+        </div>
+        
+        <!-- Step 7: Iteration -->
+        <div class="flow-step">
+          <div class="flow-step-header">
+            <div class="step-number">7</div>
+            <div class="step-title">Iterative Exploration</div>
+          </div>
+          <div class="flow-content">
+            <div class="user-action">
+              <div class="user-action-title">User Action</div>
+              <p>User continues exploration by asking new questions or drilling deeper into existing results.</p>
+            </div>
+            
+            <div class="system-action">
+              <div class="system-action-title">System Action</div>
+              <p>System maintains conversation history and context for more relevant follow-up interactions.</p>
+            </div>
+            
+            <div class="decision-point">
+              <div class="decision-header">Decision Point: Exploration Path</div>
+              <p>User determines next steps in data journey.</p>
+              <div class="decision-options">
+                <div class="decision-option">Ask new question (return to step 3) <span class="option-arrow">→</span></div>
+                <div class="decision-option">Continue result analysis (step 6) <span class="option-arrow">→</span></div>
+                <div class="decision-option">Switch database connection (step 2) <span class="option-arrow">→</span></div>
+                <div class="decision-option">End session <span class="option-arrow">→</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="note-box">
+        <strong>Key User Experience Considerations:</strong>
+        <ul>
+          <li>The system maintains a conversational memory that preserves context between queries</li>
+          <li>Query refinement happens without requiring technical intervention</li>
+          <li>The transition between data retrieval and insight analysis is seamless</li>
+          <li>Business context enhances both query generation and result interpretation</li>
+          <li>Data operations respect user permission levels and security constraints</li>
+        </ul>
+      </div>
+    </section>
+  </div>
+  
+  <footer>
+    <p>Platform Documentation - Confidential JMD 2025</p>
+  </footer>
+  
+  <script>
+    function showPage(pageId) {
+      // Hide all sections
+      const sections = document.querySelectorAll('.page-section');
+      sections.forEach(section => {
+        section.classList.remove('active');
+      });
+      
+      // Show the selected section
+      document.getElementById(pageId).classList.add('active');
+      
+      // Update active button
+      const buttons = document.querySelectorAll('.nav-button');
+      buttons.forEach(button => {
+        button.classList.remove('active');
+      });
+      
+      // Find the button that was clicked and make it active
+      const activeButton = Array.from(buttons).find(button => 
+        button.getAttribute('onclick').includes(pageId)
+      );
+      if (activeButton) {
+        activeButton.classList.add('active');
+      }
+    }
+  </script>
+</body>
+</html>
