@@ -2,7 +2,6 @@
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
-from langchain.memory import ConversationBufferMemory
 import pandas as pd
 import yaml
 import re
@@ -55,8 +54,6 @@ class QueryGenerator:
         """Initialize with LLM client and load prompts."""
         self.llm = self._get_llm_client()
         self.thread_id = str(uuid4())  # Generate unique thread ID for each instance
-        self.memory = ConversationBufferMemory(return_messages=True)
-        self.analysis_memory = ConversationBufferMemory(return_messages=True)
         self.last_error = None  # Track the last query error
         with open('prompts.yaml', 'r') as file:
             self.prompts = yaml.safe_load(file)['prompts']['sql_generation']
@@ -174,32 +171,40 @@ class QueryGenerator:
             )
 
     def _format_chat_history(self, question: str) -> str:
-        """Format chat history for context."""
-        messages = self.memory.chat_memory.messages
-        if not messages:
+        """Format chat history using Streamlit session state."""
+        if 'chat_history' not in st.session_state or not st.session_state.chat_history:
             return ""
+        
         history = []
-        for msg in messages[-7:]:  # Last 7 interactions
-            if hasattr(msg, 'content') and isinstance(msg.content, str):
-                # Include all queries, not just SELECT statements
-                if any(keyword in msg.content.upper() for keyword in ['SELECT', 'WITH', 'INSERT', 'UPDATE', 'DELETE']):
-                    history.append(f"Previous query: {msg.content}")
+        # Get last 3 interactions (reduced from 7 for better performance)
+        recent_history = st.session_state.chat_history[-3:]
+        
+        for interaction in recent_history:
+            if 'query' in interaction:
+                history.append(f"Previous query: {interaction['query']}")
+        
         # Add error context if available
         if self.last_error:
             history.append(f"Previous error: {self.last_error}")
-        return "\n".join(history) if history else ""
+        
+        return "\n".join(history)
 
     def _format_analysis_history(self) -> str:
-        """Format analysis conversation history."""
-        messages = self.analysis_memory.chat_memory.messages
-        if not messages:
+        """Format analysis conversation history using session state."""
+        if 'chat_history' not in st.session_state or not st.session_state.chat_history:
             return ""
+        
         history = []
-        for msg in messages[-6:]:  # Last 6 interactions
-            if hasattr(msg, 'content'):
-                role = "User" if msg.type == "human" else "Assistant"
-                history.append(f"{role}: {msg.content}")
-        return "\n".join(history) if history else ""
+        # Get last 4 interactions for analysis context
+        recent_history = st.session_state.chat_history[-4:]
+        
+        for interaction in recent_history:
+            if interaction.get('type') == 'analysis':
+                history.append(f"Previous analysis: {interaction['result'][:200]}...")
+            elif 'question' in interaction:
+                history.append(f"User question: {interaction['question']}")
+        
+        return "\n".join(history)
 
     def _get_snowflake_connection(self):
         """Create Snowflake connection using active connection config."""
@@ -476,9 +481,7 @@ class QueryGenerator:
             generated_sql=generated_sql,
             prompt_used=prompt
         )
-        if response and response.content:
-            self.memory.chat_memory.add_user_message(question)
-            self.memory.chat_memory.add_ai_message(response.content)
+    
         return generated_sql
 
     def execute_query(self, query: str) -> pd.DataFrame:
@@ -582,10 +585,7 @@ class QueryGenerator:
             analysis_response=response.content,
             data_shape={'rows': len(df), 'columns': len(df.columns)}
         )
-        # Initialize analysis conversation
-        self.analysis_memory.clear()
-        self.analysis_memory.chat_memory.add_user_message(original_question)
-        self.analysis_memory.chat_memory.add_ai_message(response.content)
+        
         return response.content
 
     def continue_analysis(self, follow_up: str, df: pd.DataFrame, original_question: str, config=None) -> str:
@@ -655,9 +655,7 @@ class QueryGenerator:
             analysis_response=response.content,
             data_shape={'rows': len(df), 'columns': len(df.columns)}
         )
-        # Add to analysis conversation history
-        self.analysis_memory.chat_memory.add_user_message(follow_up)
-        self.analysis_memory.chat_memory.add_ai_message(response.content)
+
         return response.content
 
 

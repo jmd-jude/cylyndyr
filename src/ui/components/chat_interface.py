@@ -88,8 +88,7 @@ class ChatInterfaceUI:
                 st.session_state.current_results = None
                 st.session_state.current_question = None
                 st.session_state.analysis_mode = False  # Reset mode on clear
-                get_query_generator().memory.clear()
-                get_query_generator().analysis_memory.clear()
+                pass
                 st.rerun()
         
         if st.session_state.chat_history:
