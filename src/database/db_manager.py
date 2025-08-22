@@ -55,9 +55,9 @@ class DatabaseManager:
         logger.info("DatabaseManager initialization complete")
 
     def _get_snowflake_connection(self, config: Dict) -> snowflake.connector.SnowflakeConnection:
-        """Create Snowflake connection using connection config."""
+        """Create Snowflake connection using private key authentication only."""
         # Mask sensitive info in logs
-        safe_config = {k: '***' if k in ['password', 'private_key_path'] else v 
+        safe_config = {k: '***' if k in ['private_key_path'] else v 
                     for k, v in config.items()}
         logger.info("Attempting to connect to Snowflake with config: " + 
                 json.dumps(safe_config, indent=2))
@@ -72,73 +72,57 @@ class DatabaseManager:
                 'schema': config['schema']
             }
             
-            # Determine authentication method
-            auth_type = config.get('auth_type', 'password')  # Default to password for backward compatibility
+            # Private key authentication only
+            private_key_path = config.get('private_key_path')
+            if not private_key_path:
+                raise ValueError("Private key path not specified in config")
             
-            if auth_type == 'private_key':
-                # Private key authentication
-                private_key_path = config.get('private_key_path')
-                if not private_key_path:
-                    raise ValueError("Private key path not specified in config")
+            try:
+                # Get private key from environment or secrets
+                private_key_content = os.getenv(private_key_path)
                 
-                # Try to get private key from environment or secrets
-                try:
-                    # First try environment variable
-                    private_key_content = os.getenv(private_key_path)
-                    
-                    # If not found, try streamlit secrets
-                    if not private_key_content:
-                        try:
-                            private_key_content = st.secrets[private_key_path]
-                        except Exception:
-                            pass
-                    
-                    # If still not found, treat as file path
-                    if not private_key_content:
-                        if os.path.exists(private_key_path):
-                            with open(private_key_path, "rb") as key_file:
-                                private_key_content = key_file.read()
-                        else:
-                            raise ValueError(f"Private key not found: {private_key_path}")
-                    
-                    # If it's a string (from env/secrets), process it carefully
-                    if isinstance(private_key_content, str):
-                        # Handle potential newline issues in environment variables
-                        private_key_content = private_key_content.replace('\\n', '\n')
-                        private_key_content = private_key_content.encode('utf-8')
-                    
-                    logger.info(f"Private key content length: {len(private_key_content)} bytes")
-                    logger.info(f"Private key starts with: {str(private_key_content[:50])}")
-                    
-                    # Parse the private key using cryptography library
-                    from cryptography.hazmat.primitives import serialization
-                    from cryptography.hazmat.primitives.serialization import load_pem_private_key
-                    
-                    # Load the PEM private key
-                    private_key_obj = load_pem_private_key(
-                        private_key_content,
-                        password=None  # We generated unencrypted key
-                    )
-                    
-                    # Convert to DER format (binary) that Snowflake expects
-                    private_key_der = private_key_obj.private_bytes(
-                        encoding=serialization.Encoding.DER,
-                        format=serialization.PrivateFormat.PKCS8,
-                        encryption_algorithm=serialization.NoEncryption()
-                    )
-                    
-                    connection_params['private_key'] = private_key_der
-                    logger.info("Using private key authentication")
-                    
-                except Exception as e:
-                    logger.error(f"Failed to load private key: {str(e)}")
-                    logger.error(f"Private key content preview: {str(private_key_content[:100]) if 'private_key_content' in locals() else 'Not loaded'}")
-                    raise ValueError(f"Failed to load private key: {str(e)}")
-                    
-            else:
-                # Password authentication (default)
-                connection_params['password'] = config['password']
-                logger.info("Using password authentication")
+                if not private_key_content:
+                    try:
+                        private_key_content = st.secrets[private_key_path]
+                    except Exception:
+                        pass
+                
+                if not private_key_content:
+                    if os.path.exists(private_key_path):
+                        with open(private_key_path, "rb") as key_file:
+                            private_key_content = key_file.read()
+                    else:
+                        raise ValueError(f"Private key not found: {private_key_path}")
+                
+                # Handle string format from env/secrets
+                if isinstance(private_key_content, str):
+                    private_key_content = private_key_content.replace('\\n', '\n')
+                    private_key_content = private_key_content.encode('utf-8')
+                
+                logger.info(f"Private key content length: {len(private_key_content)} bytes")
+                
+                # Parse the private key
+                from cryptography.hazmat.primitives import serialization
+                from cryptography.hazmat.primitives.serialization import load_pem_private_key
+                
+                private_key_obj = load_pem_private_key(
+                    private_key_content,
+                    password=None
+                )
+                
+                # Convert to DER format for Snowflake
+                private_key_der = private_key_obj.private_bytes(
+                    encoding=serialization.Encoding.DER,
+                    format=serialization.PrivateFormat.PKCS8,
+                    encryption_algorithm=serialization.NoEncryption()
+                )
+                
+                connection_params['private_key'] = private_key_der
+                logger.info("Using private key authentication")
+                
+            except Exception as e:
+                logger.error(f"Failed to load private key: {str(e)}")
+                raise ValueError(f"Failed to load private key: {str(e)}")
             
             # Create connection
             conn = snowflake.connector.connect(**connection_params)

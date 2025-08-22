@@ -24,59 +24,39 @@ class SchemaEditorUI:
             st.session_state.selected_table = None
 
     def render_add_connection(self):
-        """Render the add connection form."""
-        # Only show add connection form to admins
+        """Render the add connection form (private key auth only)."""
         if not st.session_state.get('is_admin', False):
             return
 
         with st.expander("➕ Add New Connection"):
-            # Authentication type selector OUTSIDE the form
-            auth_type = st.radio(
-                "Authentication Method",
-                ["password", "private_key"],
-                format_func=lambda x: "Password" if x == "password" else "Private Key",
-                help="Select authentication method for Snowflake connection"
-            )
-            
-            # Connection form
             with st.form("add_connection_form"):
                 conn_name = st.text_input("Connection Name")
                 account = st.text_input("Account")
                 username = st.text_input("Username")
                 
-                # Show different fields based on auth type
-                if auth_type == "password":
-                    password = st.text_input("Password", type="password")
-                    private_key_path = None
-                else:
-                    password = None
-                    private_key_path = st.text_input(
-                        "Private Key Secret Name",
-                        help="Name of the Streamlit secret containing your private key (e.g., 'SNOWFLAKE_PRIVATE_KEY')",
-                        placeholder="SNOWFLAKE_PRIVATE_KEY"
-                    )
+                # Private key only - no auth type selector
+                private_key_path = st.text_input(
+                    "Private Key Secret Name",
+                    help="Name of the Streamlit secret containing your private key (e.g., 'SNOWFLAKE_PRIVATE_KEY')",
+                    placeholder="SNOWFLAKE_PRIVATE_KEY"
+                )
                 
                 warehouse = st.text_input("Warehouse")
                 database = st.text_input("Database")
                 schema = st.text_input("Schema")
                 
-                # Submit button
                 submitted = st.form_submit_button("Add Connection")
                 if submitted:
-                    # Validation based on auth type
-                    required_fields = [conn_name, account, username, warehouse, database, schema]
-                    if auth_type == "password":
-                        required_fields.append(password)
-                    else:
-                        required_fields.append(private_key_path)
+                    # Simple validation - all fields required
+                    required_fields = [conn_name, account, username, warehouse, database, schema, private_key_path]
                     
                     if not all(required_fields):
                         st.warning("Please fill in all fields")
                         return
                         
-                    # Add connection
                     with st.spinner("Creating connection..."):
                         try:
+                            # Simple config - private key only
                             config = {
                                 "type": "snowflake",
                                 "account": account,
@@ -84,14 +64,9 @@ class SchemaEditorUI:
                                 "warehouse": warehouse,
                                 "database": database,
                                 "schema": schema,
-                                "auth_type": auth_type
+                                "auth_type": "private_key",  # Always private key
+                                "private_key_path": private_key_path
                             }
-                            
-                            # Add auth-specific fields
-                            if auth_type == "password":
-                                config["password"] = password
-                            else:
-                                config["private_key_path"] = private_key_path
                             
                             connection_id = self.db_manager.add_connection(
                                 st.session_state.user_id,
@@ -207,16 +182,9 @@ class SchemaEditorUI:
             save_callback()
 
     def render_table_descriptions(self, config: Dict[str, Any], save_callback):
-        """Render table descriptions section - SIMPLIFIED for v2 format."""
+        """Render table descriptions section (v2.0 format only)."""
         st.subheader("Table & Field Descriptions")
-        
-        # Handle both v1 and v2 formats
-        if config.get('version') == '2.0':
-            # v2 format - direct access
-            tables = config.get("tables", {})
-        else:
-            # v1 format - convert on the fly for display
-            tables = config.get("base_schema", {}).get("tables", {})
+        tables = config.get("tables", {})
         
         if not tables:
             st.warning("No tables found in schema")
@@ -241,105 +209,45 @@ class SchemaEditorUI:
         st.session_state.selected_table = selected_table
         
         # Handle table info based on format
-        if config.get('version') == '2.0':
-            # v2 format - direct access (MUCH SIMPLER!)
-            table_info = tables[selected_table]
-            
-            # Table description - direct path
-            new_table_desc = st.text_area(
-                f"Description for {selected_table}",
-                value=table_info.get("description", ""),
-                help="Describe the business purpose of this table"
-            )
-            if new_table_desc != table_info.get("description", ""):
-                table_info["description"] = new_table_desc
-                save_callback()
-            
-            # Field descriptions - direct access
-            st.write("Field Descriptions:")
-            for field_name, field_info in table_info.get("fields", {}).items():
-                col1, col2 = st.columns([1, 3])
-                with col1:
-                    st.write(f"**{field_name}**")
-                    st.write(f"Type: {field_info.get('type', 'TEXT')}")
-                    if field_info.get("primary_key"):
-                        st.write("🔑 Primary Key")
-                    if field_info.get("foreign_key"):
-                        st.write("🔗 Foreign Key")
-                    if field_info.get("nullable"):
-                        st.write("Optional")
-                    else:
-                        st.write("Required")
-                
-                with col2:
-                    # Simple, direct description editing
-                    new_field_desc = st.text_area(
-                        f"Description for {field_name}",
-                        value=field_info.get("description", ""),
-                        key=f"field_{selected_table}_{field_name}",
-                        help="Describe the business meaning of this field"
-                    )
-                    if new_field_desc != field_info.get("description", ""):
-                        field_info["description"] = new_field_desc
-                        save_callback()
+        table_info = tables[selected_table]
         
-        else:
-            # v1 format - use old complex logic as fallback
-            table_info = tables[selected_table]
+        # Table description - direct path
+        new_table_desc = st.text_area(
+            f"Description for {selected_table}",
+            value=table_info.get("description", ""),
+            help="Describe the business purpose of this table"
+        )
+        if new_table_desc != table_info.get("description", ""):
+            table_info["description"] = new_table_desc
+            save_callback()
+        
+        # Field descriptions - direct access
+        st.write("Field Descriptions:")
+        for field_name, field_info in table_info.get("fields", {}).items():
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                st.write(f"**{field_name}**")
+                st.write(f"Type: {field_info.get('type', 'TEXT')}")
+                if field_info.get("primary_key"):
+                    st.write("🔑 Primary Key")
+                if field_info.get("foreign_key"):
+                    st.write("🔗 Foreign Key")
+                if field_info.get("nullable"):
+                    st.write("Optional")
+                else:
+                    st.write("Required")
             
-            # Initialize business_context structure if needed (complex v1 logic)
-            if "business_context" not in config:
-                config["business_context"] = {}
-            if "table_descriptions" not in config["business_context"]:
-                config["business_context"]["table_descriptions"] = {}
-            if selected_table not in config["business_context"]["table_descriptions"]:
-                config["business_context"]["table_descriptions"][selected_table] = {}
-            
-            table_desc = config["business_context"]["table_descriptions"][selected_table]
-            
-            # Table description
-            new_table_desc = st.text_area(
-                f"Description for {selected_table}",
-                value=table_desc.get("description", ""),
-                help="Describe the business purpose of this table"
-            )
-            if new_table_desc != table_desc.get("description", ""):
-                table_desc["description"] = new_table_desc
-                save_callback()
-            
-            # Field descriptions
-            st.write("Field Descriptions:")
-            for field_name, field_info in table_info.get("fields", {}).items():
-                col1, col2 = st.columns([1, 3])
-                with col1:
-                    st.write(f"**{field_name}**")
-                    st.write(f"Type: {field_info['type']}")
-                    if field_info.get("primary_key"):
-                        st.write("🔑 Primary Key")
-                    if field_info.get("foreign_key"):
-                        st.write("🔗 Foreign Key")
-                    if field_info.get("nullable"):
-                        st.write("Optional")
-                    else:
-                        st.write("Required")
-                
-                with col2:
-                    # Initialize fields structure if needed
-                    if "fields" not in table_desc:
-                        table_desc["fields"] = {}
-                    if field_name not in table_desc["fields"]:
-                        table_desc["fields"][field_name] = {}
-                    
-                    field_desc = table_desc["fields"][field_name]
-                    new_field_desc = st.text_area(
-                        f"Description for {field_name}",
-                        value=field_desc.get("description", ""),
-                        key=f"field_{selected_table}_{field_name}",
-                        help="Describe the business meaning of this field"
-                    )
-                    if new_field_desc != field_desc.get("description", ""):
-                        field_desc["description"] = new_field_desc
-                        save_callback()
+            with col2:
+                # Simple, direct description editing
+                new_field_desc = st.text_area(
+                    f"Description for {field_name}",
+                    value=field_info.get("description", ""),
+                    key=f"field_{selected_table}_{field_name}",
+                    help="Describe the business meaning of this field"
+                )
+                if new_field_desc != field_info.get("description", ""):
+                    field_info["description"] = new_field_desc
+                    save_callback()
 
     def render(self):
         """Render the schema editor UI."""
