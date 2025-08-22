@@ -8,7 +8,6 @@ from typing import Optional, Dict, List, Any, Tuple
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import IntegrityError
-from psycopg2.errors import UniqueViolation
 from .models import Base, User, Connection, SchemaConfig
 import snowflake.connector
 import traceback
@@ -200,24 +199,29 @@ class DatabaseManager:
                     
                     # Get primary key information (IMPROVED!)
                     logger.info("Querying primary keys")
-                    cursor.execute("""
-                        SELECT 
-                            tc.table_name,
-                            kcu.column_name
-                        FROM information_schema.table_constraints tc
-                        JOIN information_schema.key_column_usage kcu 
-                            ON tc.constraint_name = kcu.constraint_name
-                            AND tc.table_schema = kcu.table_schema
-                        WHERE tc.table_schema = CURRENT_SCHEMA()
-                        AND tc.constraint_type = 'PRIMARY KEY'
-                    """)
-                    primary_keys = cursor.fetchall()
                     pk_dict = {}
-                    for table_name, column_name in primary_keys:
-                        if table_name not in pk_dict:
-                            pk_dict[table_name] = set()
-                        pk_dict[table_name].add(column_name)
-                    logger.info(f"Found primary keys: {pk_dict}")
+                    try:
+                        cursor.execute("""
+                            SELECT 
+                                tc.table_name,
+                                kcu.column_name
+                            FROM information_schema.table_constraints tc
+                            JOIN information_schema.key_column_usage kcu 
+                                ON tc.constraint_name = kcu.constraint_name
+                                AND tc.table_schema = kcu.table_schema
+                            WHERE tc.table_schema = CURRENT_SCHEMA()
+                            AND tc.constraint_type = 'PRIMARY KEY'
+                        """)
+                        primary_keys = cursor.fetchall()
+                        for table_name, column_name in primary_keys:
+                            if table_name not in pk_dict:
+                                pk_dict[table_name] = set()
+                            pk_dict[table_name].add(column_name)
+                        logger.info(f"Found primary keys: {pk_dict}")
+                    except Exception as pk_error:
+                        logger.warning(f"Could not query primary keys (insufficient permissions): {str(pk_error)}")
+                        logger.info("Continuing without primary key information")
+                        pk_dict = {}
                     
                     # Get column information for each table/view
                     for table_name, _ in tables:
@@ -269,6 +273,108 @@ class DatabaseManager:
             logger.error(f"Full traceback: {traceback.format_exc()}")
             return None
 
+    def smart_schema_refresh(self, connection_id: str) -> bool:
+        """Refresh schema structure while preserving manual annotations."""
+        try:
+            logger.info(f"Starting smart schema refresh for connection: {connection_id}")
+            
+            # 1. Get current config with annotations
+            current_schema_config = self.get_schema_config(connection_id)
+            
+            # 2. If no current config exists, just do normal introspection
+            if not current_schema_config:
+                logger.info("No existing config found, doing full introspection")
+                fresh_config = self.introspect_schema(connection_id)
+                if fresh_config:
+                    return self.update_schema_config(connection_id, fresh_config)
+                return False
+            
+            # 3. Get fresh structure from database
+            logger.info("Getting fresh schema structure from database")
+            fresh_config = self.introspect_schema(connection_id)
+            if not fresh_config:
+                logger.error("Failed to introspect fresh schema")
+                return False
+            
+            # 4. Merge: Keep annotations, update structure
+            logger.info("Merging fresh structure with existing annotations")
+            merged_config = self._merge_schema_configs(
+                current_schema_config['config'], 
+                fresh_config
+            )
+            
+            # 5. Update with merged result
+            success = self.update_schema_config(connection_id, merged_config)
+            if success:
+                logger.info("Smart schema refresh completed successfully")
+            else:
+                logger.error("Failed to update schema config with merged result")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error during smart schema refresh: {str(e)}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            return False
+
+    def _merge_schema_configs(self, current: dict, fresh: dict) -> dict:
+        """Merge fresh schema structure with existing annotations."""
+        try:
+            logger.info(f"Merging configs - Current version: {current.get('version', 'unknown')}, Fresh version: {fresh.get('version', 'unknown')}")
+            
+            # Start with fresh structure as base (gets new tables, updated types, etc.)
+            merged = fresh.copy()
+            
+            # Preserve business context and query guidelines from current
+            if current.get('business_context'):
+                merged['business_context'] = current['business_context']
+                logger.info("Preserved business context")
+            
+            if current.get('query_guidelines'):
+                merged['query_guidelines'] = current['query_guidelines']
+                logger.info("Preserved query guidelines")
+            
+            # For each table in fresh structure, preserve annotations
+            current_tables = current.get('tables', {})
+            fresh_tables = fresh.get('tables', {})
+            
+            for table_name, fresh_table in fresh_tables.items():
+                current_table = current_tables.get(table_name, {})
+                
+                # Preserve table description
+                if current_table.get('description'):
+                    merged['tables'][table_name]['description'] = current_table['description']
+                    logger.info(f"Preserved description for table: {table_name}")
+                
+                # For each field, preserve descriptions
+                current_fields = current_table.get('fields', {})
+                fresh_fields = fresh_table.get('fields', {})
+                
+                for field_name, fresh_field in fresh_fields.items():
+                    current_field = current_fields.get(field_name, {})
+                    
+                    # Preserve field description annotation
+                    if current_field.get('description'):
+                        merged['tables'][table_name]['fields'][field_name]['description'] = current_field['description']
+                        logger.info(f"Preserved description for field: {table_name}.{field_name}")
+            
+            # Log summary
+            preserved_table_descs = sum(1 for t in merged.get('tables', {}).values() if t.get('description'))
+            preserved_field_descs = sum(
+                sum(1 for f in table.get('fields', {}).values() if f.get('description'))
+                for table in merged.get('tables', {}).values()
+            )
+            
+            logger.info(f"Merge complete - Preserved {preserved_table_descs} table descriptions and {preserved_field_descs} field descriptions")
+            
+            return merged
+            
+        except Exception as e:
+            logger.error(f"Error during config merge: {str(e)}")
+            # If merge fails, return fresh config as fallback
+            logger.warning("Merge failed, returning fresh config as fallback")
+            return fresh
+    
     def add_user(self, username: str, password_hash: str) -> Tuple[Optional[str], Optional[str]]:
         """Add new user to database."""
         session = self.Session()
@@ -280,7 +386,8 @@ class DatabaseManager:
             logger.info(f"User added successfully with ID: {user.id}")
             return user.id, None
         except IntegrityError as e:
-            if isinstance(e.orig, UniqueViolation):
+            # Check if it's a duplicate email error
+            if "email" in str(e).lower() and "unique" in str(e).lower():
                 logger.error(f"Email already exists: {username}")
                 return None, "Email already exists"
             logger.error(f"Database integrity error: {str(e)}")

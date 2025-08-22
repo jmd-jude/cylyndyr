@@ -145,14 +145,11 @@ class SchemaEditorUI:
             # Add refresh button (only for admins)
             with col2:
                 if st.session_state.get('is_admin', False) and st.session_state.active_connection_id and st.button("🔄 Refresh"):
-                    with st.spinner("Refreshing schema..."):
-                        schema_config = self.db_manager.introspect_schema(st.session_state.active_connection_id)
-                        if schema_config:
-                            if self.db_manager.update_schema_config(st.session_state.active_connection_id, schema_config):
-                                st.success("Schema refreshed successfully!")
-                                st.rerun()
-                            else:
-                                st.error("Failed to update schema configuration")
+                    with st.spinner("Refreshing schema (preserving annotations)..."):
+                        success = self.db_manager.smart_schema_refresh(st.session_state.active_connection_id)
+                        if success:
+                            st.success("Schema refreshed successfully! All annotations preserved.")
+                            st.rerun()
                         else:
                             st.error("Failed to refresh schema")
 
