@@ -14,7 +14,7 @@ from src.ui.components.chat_interface import ChatInterfaceUI
 from src.ui.components.schema_editor import SchemaEditorUI
 from src.ui.components.login import LoginUI
 from src.database.db_manager import get_database_manager
-from src.langchain_components.qa_chain import get_query_generator
+from src.query.generator import get_query_generator
 
 # Debug: Print environment at startup
 print("Environment variables at startup:")

@@ -1,7 +1,5 @@
 """Query generation and execution components."""
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-from langchain_core.prompts import ChatPromptTemplate
+from src.llm.client import LLMClient
 import pandas as pd
 import yaml
 import re
@@ -52,8 +50,8 @@ class QueryGenerator:
 
     def __init__(self):
         """Initialize with LLM client and load prompts."""
-        self.llm = self._get_llm_client()
-        self.thread_id = str(uuid4())  # Generate unique thread ID for each instance
+        self.llm = LLMClient()
+        self.thread_id = str(uuid4())
         self.last_error = None  # Track the last query error
         with open('prompts.yaml', 'r') as file:
             self.prompts = yaml.safe_load(file)['prompts']['sql_generation']
@@ -139,36 +137,6 @@ class QueryGenerator:
                     conn.close()
                 except Exception:
                     pass
-
-    def _get_llm_client(self):
-        """Initialize LLM client based on configuration."""
-        try:
-            model = os.getenv("LLM_MODEL") or st.secrets["LLM_MODEL"]
-            temperature = float(os.getenv("LLM_TEMPERATURE") or st.secrets["LLM_TEMPERATURE"])
-            if "claude" in model.lower():
-                return ChatAnthropic(
-                    api_key=os.getenv("ANTHROPIC_API_KEY") or st.secrets["ANTHROPIC_API_KEY"],
-                    model=model,
-                    temperature=temperature,
-                    max_tokens=int(os.getenv("LLM_MAX_TOKENS", "4096")),
-                    top_p=float(os.getenv("LLM_TOP_P", "1"))
-                )
-            else:
-                return ChatOpenAI(
-                    api_key=os.getenv("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"],
-                    model=model,
-                    temperature=temperature,
-                    max_tokens=int(os.getenv("LLM_MAX_TOKENS", "4096")),
-                    top_p=float(os.getenv("LLM_TOP_P", "1"))
-                )
-        except Exception as e:
-            logging.error(f"Error initializing LLM client: {str(e)}")
-            # Fallback to OpenAI
-            return ChatOpenAI(
-                api_key=os.getenv("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"],
-                model="gpt-3.5-turbo",
-                temperature=0
-            )
 
     def _format_chat_history(self, question: str) -> str:
         """Format chat history using Streamlit session state."""
@@ -395,9 +363,8 @@ class QueryGenerator:
             question=question,
             chat_history=self._format_chat_history(question)
         )
-        messages = ChatPromptTemplate.from_template(prompt).format_messages(question=question)
-        response = self.llm.invoke(messages)
-        generated_sql = self._sanitize_sql(response.content)
+        response_content = self.llm.generate(prompt)
+        generated_sql = self._sanitize_sql(response_content)
         # Log query generation
         self._log_interaction(
             'query_generation',
@@ -501,16 +468,16 @@ class QueryGenerator:
         - Express percentages as "X%" (e.g., "28%" not "28 percent")
         Keep explanations focused on helping the user understand how their question was translated into data operations. Avoid analyzing the business implications - that will come later in the discussion mode. End with "Toggle to 'Discussion Mode' to explore what these results mean for your business."
         """
-        response = self.llm.invoke([{"role": "user", "content": analysis_prompt}])
+        response = self.llm.generate(analysis_prompt)
         # Log analysis
         self._log_interaction(
             'analysis',
             original_question=original_question,
-            analysis_response=response.content,
+            analysis_response=response,
             data_shape={'rows': len(df), 'columns': len(df.columns)}
         )
         
-        return response.content
+        return response
 
     def continue_analysis(self, follow_up: str, df: pd.DataFrame, original_question: str, config=None) -> str:
         """Continue analysis conversation about the results."""
@@ -570,17 +537,17 @@ class QueryGenerator:
         - Identify data gaps if any
         - Recommend concrete actions
         """
-        response = self.llm.invoke([{"role": "user", "content": analysis_prompt}])
+        response = self.llm.generate(analysis_prompt)
         # Log follow-up analysis
         self._log_interaction(
             'follow_up_analysis',
             original_question=original_question,
             follow_up_question=follow_up,
-            analysis_response=response.content,
+            analysis_response=response,
             data_shape={'rows': len(df), 'columns': len(df.columns)}
         )
 
-        return response.content
+        return response
 
 
 # Initialize query generator

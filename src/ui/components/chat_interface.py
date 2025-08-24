@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime
 from typing import Union
 
-from src.langchain_components.qa_chain import (
+from src.query.generator import (
     generate_dynamic_query,
     execute_dynamic_query,
     get_query_generator
