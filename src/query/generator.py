@@ -50,20 +50,37 @@ class QueryGenerator:
     """Handles SQL query generation and execution."""
 
     def __init__(self):
-        """Initialize with LLM client and load prompts."""
+        """Initialize with domain-aware prompt system."""
         self.llm = LLMClient()
         self.thread_id = str(uuid4())
-        self.last_error = None  # Track the last query error
+        self.last_error = None
+        
+        # Load domain-aware prompts
         with open('prompts.yaml', 'r') as file:
-            self.prompts = yaml.safe_load(file)['prompts']['sql_generation']
-
+            prompt_config = yaml.safe_load(file)
+        
+        self.prompt_system = prompt_config['prompt_system']
+        self.domains = prompt_config['domains']
+        self.config = prompt_config.get('config', {})
+        
+        # Set default domain (could be made user-configurable later)
+        self.current_domain = self.prompt_system['default_domain']
+        
         # Set up structured logging
         self.logger = logging.getLogger('qa_chain')
         self.logger.setLevel(logging.INFO)
         # Add JSON formatter for structured logging
-        json_handler = logging.FileHandler(f'logs/qa_chain_{datetime.now().strftime("%Y%m%d")}.json')
-        json_handler.setFormatter(logging.Formatter('%(message)s'))
-        self.logger.addHandler(json_handler)
+        try:
+            os.makedirs('logs', exist_ok=True)
+            json_handler = logging.FileHandler(f'logs/qa_chain_{datetime.now().strftime("%Y%m%d")}.json')
+            json_handler.setFormatter(logging.Formatter('%(message)s'))
+            self.logger.addHandler(json_handler)
+        except Exception as e:
+            logging.warning(f"Could not set up file logging: {str(e)}")
+
+    def get_domain_prompts(self):
+        """Get prompts for current domain."""
+        return self.domains[self.current_domain]
 
     def _log_interaction(self, interaction_type: str, **kwargs):
         """Log structured interaction data to both file and Supabase."""
@@ -335,24 +352,29 @@ class QueryGenerator:
         return formatted.strip()
 
     def generate_query(self, question: str, config=None) -> str:
-        """Generate SQL query from natural language question."""
-        prompt = self.prompts['template'].format(
-            base_role=self.prompts['base_role'].format(database_type="Snowflake"),
+        """Generate SQL query using domain-specific prompts."""
+        domain_prompts = self.get_domain_prompts()['sql_generation']
+        
+        prompt = domain_prompts['template'].format(
+            base_role=domain_prompts['base_role'].format(database_type="Snowflake"),
             table_list=self._get_table_list(config),
             schema_context=self._get_schema_context(config),
             question=question,
             chat_history=self._format_chat_history(question)
         )
+        
         response_content = self.llm.generate(prompt)
         generated_sql = self._sanitize_sql(response_content)
+        
         # Log query generation
         self._log_interaction(
             'query_generation',
             user_question=question,
             generated_sql=generated_sql,
-            prompt_used=prompt
+            domain=self.current_domain,
+            prompt_version=self.prompt_system['version']
         )
-    
+
         return generated_sql
 
     def execute_query(self, query: str) -> pd.DataFrame:
@@ -435,137 +457,80 @@ class QueryGenerator:
             logging.warning(f"Failed to save query to history: {str(e)}")
 
     def analyze_result(self, df: pd.DataFrame, original_question: str, config=None) -> str:
-        """Generate schema-aware analysis of query results."""
+        """Generate analysis using domain-specific prompts."""
+        domain_prompts = self.get_domain_prompts()['analysis']
+        
         business_context = self._get_business_context(config)
         field_context = self._get_field_context(df, config)
-        # Prepare data context based on size
-        if len(df) <= 100:
-            # For small result sets, include all data
-            data_context = f"""
-            Full Dataset ({len(df)} rows):
-            {df.to_dict('records')}
-            """
-        else:
-            # For larger sets, take a smart sample
-            sample_size = min(100, len(df) // 10)
-            sampled_df = df.sample(n=sample_size, random_state=42)  # Fixed random state for reproducibility
-            data_context = f"""
-            Sample Dataset ({sample_size} rows from total {len(df)}):
-            {sampled_df.to_dict('records')}
-            Value Ranges:
-            {df.describe().to_dict()}
-            """
-        analysis_prompt = f"""
-        You are a skilled SQL analyst explaining your query approach to a business user. They asked a question in plain English, and you want to help them understand how the resulting dataset answers their question.
-        CONTEXT:
-        Original Question: {original_question}{business_context}{field_context}
-        {data_context}
-        EXPLANATION FRAMEWORK:
-        1. Query Overview
-        - Start with a plain-English summary of how you approached answering their question
-        - Explain why you chose to structure the data the way you did
-        - Highlight any clever or non-obvious ways you transformed the data to match their needs
-        2. Data Pipeline Walkthrough
-        - Break down the major steps in how the data was assembled
-        - Explain any important data joins or combinations and why they were necessary
-        - Note any filtering, grouping, or aggregations that shaped the final result
-        - Describe any calculated fields and what they represent
-        3. Result Structure
-        - Explain what each column in the result represents in business terms
-        - Clarify any potentially confusing aspects of how the data is organized
-        - Note if any data was deliberately excluded and why
-        - Highlight any assumptions made in how the data was structured
-        4. Data Quality Context
-        - Note any important caveats about the data (e.g., time periods covered, excluded scenarios)
-        - Explain any null values or special cases in the results
-        - Mention any data transformations that might affect interpretation
-        FORMATTING REQUIREMENTS:
-        - Use plain English, avoiding technical SQL terms unless necessary
-        - When technical terms are needed, explain them in business context
-        - Format numbers with commas for thousands (e.g., "1,234" not "1234")
-        - Express percentages as "X%" (e.g., "28%" not "28 percent")
-        Keep explanations focused on helping the user understand how their question was translated into data operations. Avoid analyzing the business implications - that will come later in the discussion mode. End with "Toggle to 'Discussion Mode' to explore what these results mean for your business."
-        """
-        response = self.llm.generate(analysis_prompt)
+        data_context = self._prepare_data_context(df)
+        
+        prompt = domain_prompts['explain_query'].format(
+            original_question=original_question,
+            business_context=business_context,
+            field_context=field_context,
+            data_context=data_context
+        )
+        
+        response = self.llm.generate(prompt)
+        
         # Log analysis
         self._log_interaction(
             'analysis',
             original_question=original_question,
             analysis_response=response,
+            domain=self.current_domain,
             data_shape={'rows': len(df), 'columns': len(df.columns)}
         )
         
         return response
 
     def continue_analysis(self, follow_up: str, df: pd.DataFrame, original_question: str, config=None) -> str:
-        """Continue analysis conversation about the results."""
-        business_context = self._get_business_context(config)
-        field_context = self._get_field_context(df, config)
+        """Continue analysis using domain-specific prompts."""
+        domain_prompts = self.get_domain_prompts()['analysis']
+        
         conversation_history = self._format_analysis_history()
-        # Prepare data context based on size (same as analyze_result)
-        if len(df) <= 100:
-            # For small result sets, include all data
-            data_context = f"""
-            Full Dataset ({len(df)} rows):
-            {df.to_dict('records')}
-            """
-        else:
-            # For larger sets, take a smart sample
-            sample_size = min(100, len(df) // 10)
-            sampled_df = df.sample(n=sample_size, random_state=42)  # Fixed random state for reproducibility
-            data_context = f"""
-            Sample Dataset ({sample_size} rows from total {len(df)}):
-            {sampled_df.to_dict('records')}
-            Value Ranges:
-            {df.describe().to_dict()}
-            """
-        analysis_prompt = f"""
-        You are a Business Intelligence Advisor engaged in an ongoing data exploration.
-        FORMATTING REQUIREMENTS:
-        - Use plain text only - no special characters or mathematical symbols
-        - Maintain proper spacing between all words and numbers
-        - Format numbers with commas for thousands (e.g., "1,234" not "1234")
-        - Use "to" instead of dashes or other symbols for ranges
-        - Express percentages as "X%" (e.g., "28%" not "28 percent")
-        - Keep all words separate (e.g., "significantly above the mean" not "significantlyabovethemean")
-        CONVERSATION CONTEXT:
-        Original Question: {original_question}
-        Current Follow-up: {follow_up}
-        Previous Discussion:
-        {conversation_history}
-        BUSINESS CONTEXT:
-        {business_context}{field_context}
-        {data_context}
-        RESPONSE APPROACH:
-        0. Context Integration
-        - Connect current findings with previous observations
-        - Highlight emerging patterns across analyses
-        - Note any shifts in understanding
-        1. Direct Answer
-        - Address the specific follow-up question
-        - Connect to previous insights
-        - Highlight new findings
-        2. Deeper Investigation
-        - Explore underlying factors
-        - Challenge assumptions
-        - Identify correlations
-        - Present an unexpected or non-obvious angle
-        3. Next Steps
-        - Suggest additional angles to explore
-        - Identify data gaps if any
-        - Recommend concrete actions
-        """
-        response = self.llm.generate(analysis_prompt)
+        data_context = self._prepare_data_context(df)
+        
+        prompt = domain_prompts['continue_discussion'].format(
+            original_question=original_question,
+            follow_up=follow_up,
+            conversation_history=conversation_history,
+            data_context=data_context
+        )
+        
+        response = self.llm.generate(prompt)
+        
         # Log follow-up analysis
         self._log_interaction(
             'follow_up_analysis',
             original_question=original_question,
             follow_up_question=follow_up,
             analysis_response=response,
+            domain=self.current_domain,
             data_shape={'rows': len(df), 'columns': len(df.columns)}
         )
 
         return response
+    
+    def _prepare_data_context(self, df: pd.DataFrame) -> str:
+        """Prepare data context for analysis prompts."""
+        if len(df) <= 50:
+            # For small result sets, include all data
+            return f"""
+            Full Dataset ({len(df)} rows):
+            {df.to_dict('records')}
+            """
+        else:
+            # For larger sets, take a smart sample
+            sample_size = min(50, len(df) // 10)
+            sampled_df = df.sample(n=sample_size, random_state=42)
+            return f"""
+            Sample Dataset ({sample_size} rows from {len(df)} total):
+            {sampled_df.to_dict('records')}
+            
+            Summary Statistics:
+            {df.describe().to_dict()}
+            """
 
 # Initialize query generator
 def get_query_generator():
