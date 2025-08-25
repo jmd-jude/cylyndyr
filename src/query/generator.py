@@ -66,10 +66,10 @@ class QueryGenerator:
         self.logger.addHandler(json_handler)
 
     def _log_interaction(self, interaction_type: str, **kwargs):
-        """Log structured interaction data to file and database."""
+        """Log structured interaction data to both file and Supabase."""
         current_time = datetime.now()
-
-        # Pre-process the kwargs to handle special types
+        
+        # Process kwargs for JSON compatibility
         def json_safe_value(v):
             if isinstance(v, (datetime, date)):
                 return v.isoformat()
@@ -77,7 +77,6 @@ class QueryGenerator:
                 return float(v)
             return v
 
-        # Recursively process nested dictionaries and lists
         def process_payload(obj):
             if isinstance(obj, dict):
                 return {k: process_payload(v) for k, v in obj.items()}
@@ -85,10 +84,6 @@ class QueryGenerator:
                 return [process_payload(i) for i in obj]
             return json_safe_value(obj)
 
-        # Initialize snowflake_payload to ensure it exists
-        snowflake_payload = None
-
-        # Process the kwargs
         processed_kwargs = process_payload(kwargs)
         log_entry = {
             'timestamp': current_time.isoformat(),
@@ -102,42 +97,26 @@ class QueryGenerator:
         # Keep existing file logging
         self.logger.info(json.dumps(log_entry))
 
-        # Add database logging
-        conn = None
+        # NEW: Log to Supabase regardless of user's connection
         try:
-            conn = self._get_snowflake_connection()
-            cursor = conn.cursor()
-            # Convert to object that Snowflake can handle
-            snowflake_payload = json.dumps(log_entry)
-            cursor.execute(
-                """
-                INSERT INTO APP_METRICS.PUBLIC.LOG_INTERACTIONS 
-                (TIMESTAMP, THREAD_ID, TYPE, DATABASE_NAME, USER_ID, PAYLOAD, CREATED_AT) 
-                SELECT 
-                    %s, %s, %s, %s, %s, 
-                    PARSE_JSON(%s),
-                    %s
-                """,
-                (
-                    current_time,
-                    self.thread_id,
-                    interaction_type,
-                    st.session_state.get('active_connection_name'),
-                    st.session_state.get('user_id'),
-                    snowflake_payload,
-                    current_time
-                )
+            from src.database.db_manager import DatabaseManager
+            db_manager = DatabaseManager()
+            
+            success = db_manager.save_interaction_log(
+                user_id=st.session_state.get('user_id'),
+                connection_id=st.session_state.get('active_connection_id'),
+                thread_id=self.thread_id,
+                interaction_type=interaction_type,
+                database_name=st.session_state.get('active_connection_name'),
+                payload=processed_kwargs
             )
-            conn.commit()
+            
+            if not success:
+                logging.error(f"Error saving interaction log: {str(e)}")
+                
         except Exception as e:
-            logging.error(f"Failed to log to database: {str(e)}")
-            logging.error(f"Attempted payload: {snowflake_payload}")  # Add this for debugging
-        finally:
-            if conn:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
+            # Don't let logging break the main flow
+            logging.warning(f"Failed to log interaction to Supabase: {str(e)}")
 
     def _format_chat_history(self, question: str) -> str:
         """Format chat history using Streamlit session state."""

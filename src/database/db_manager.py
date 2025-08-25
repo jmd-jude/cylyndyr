@@ -14,7 +14,7 @@ import snowflake.connector
 import traceback
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
-from .models import Base, User, Connection, SchemaConfig, QueryHistory
+from .models import Base, User, Connection, SchemaConfig, QueryHistory, InteractionLog
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -667,6 +667,31 @@ class DatabaseManager:
             
         except Exception as e:
             logger.error(f"Error toggling query favorite: {str(e)}")
+            session.rollback()
+            return False
+        finally:
+            session.close()
+
+    def save_interaction_log(self, user_id: str, connection_id: str, thread_id: str, 
+                        interaction_type: str, database_name: str, payload: dict) -> bool:
+        """Save interaction log to Supabase for analytics."""
+        session = self.Session()
+        try:
+            interaction_log = InteractionLog(
+                user_id=user_id,
+                connection_id=connection_id,
+                thread_id=thread_id,
+                interaction_type=interaction_type,
+                database_name=database_name,
+                payload=payload
+            )
+            
+            session.add(interaction_log)
+            session.commit()
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error saving interaction log: {str(e)}")
             session.rollback()
             return False
         finally:

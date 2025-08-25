@@ -78,6 +78,22 @@ class QueryHistory(Base):
     user = relationship("User")
     connection = relationship("Connection")
 
+class InteractionLog(Base):
+    __tablename__ = 'interaction_logs'
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey('users.id'), nullable=True)  # Nullable in case user not logged in
+    connection_id = Column(String, ForeignKey('connections.id'), nullable=True)
+    thread_id = Column(String, nullable=False)
+    interaction_type = Column(String, nullable=False)  # 'query_generation', 'query_execution', 'analysis', etc.
+    database_name = Column(String, nullable=True)  # User's connection name
+    payload = Column(JSON, nullable=False)  # All the detailed data
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User")
+    connection = relationship("Connection")
+
 def init_db(db_url):
     """Initialize the database and create all tables."""
     engine = create_engine(db_url)
