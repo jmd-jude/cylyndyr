@@ -21,6 +21,8 @@ class ChatInterfaceUI:
 
     def _handle_sql_generation(self, prompt: str) -> Union[pd.DataFrame, str]:
         """Handle SQL generation mode."""
+        # Set current question in session state BEFORE generating query
+        st.session_state.current_question = prompt
         with st.spinner("Working on it..."):
             schema_config = self.schema_editor.db_manager.get_schema_config(st.session_state.active_connection_id)
             query = generate_dynamic_query(prompt, config=schema_config.get('config') if schema_config else None)
@@ -78,40 +80,62 @@ class ChatInterfaceUI:
             return self._handle_sql_generation(prompt)
 
     def render_sidebar(self):
-        """Render the sidebar with recent queries."""
+        """Render the sidebar with recent queries from database."""
         st.subheader("Recent Questions")
         
-        col1, col2 = st.columns([3, 1])
-        with col2:
-            if st.button("🗑️ Clear", help="Clear conversation history"):
-                st.session_state.chat_history = []
-                st.session_state.current_results = None
-                st.session_state.current_question = None
-                st.session_state.analysis_mode = False  # Reset mode on clear
-                pass
-                st.rerun()
-        
-        if st.session_state.chat_history:
-            for interaction in reversed(st.session_state.chat_history[-7:]):
-                timestamp = datetime.fromisoformat(interaction['timestamp'])
-                with st.expander(f"{timestamp.strftime('%I:%M %p')} - {interaction['question'][:30]}..."):
-                    st.write("Question:")
-                    st.write(interaction['question'])
-                    if interaction.get('type') == 'analysis':
-                        st.write("Analysis:")
-                        st.write(interaction['result'])
-                    else:
-                        # Only show SQL in history to admin users
-                        if st.session_state.get('is_admin', False):
-                            st.write("SQL Query:")
-                            st.code(interaction['query'], language='sql')
-                        st.write("Result:")
-                        if isinstance(interaction['result'], pd.DataFrame):
-                            st.dataframe(interaction['result'])
-                        else:
-                            st.write(interaction['result'])
+        # Get recent queries from database instead of session state
+        if st.session_state.get('user_id') and st.session_state.get('active_connection_id'):
+            recent_queries = self.schema_editor.db_manager.get_user_query_history(
+                user_id=st.session_state.user_id,
+                connection_id=st.session_state.active_connection_id,
+                limit=5  # Limit to N most recent
+            )
+            
+            if recent_queries:
+                # Create a container with max height for scrolling
+                with st.container():
+                    for query in recent_queries[:7]:  # Show only 7 in UI to avoid clutter
+                        # Parse created_at and format nicely
+                        from datetime import datetime
+                        try:
+                            created_at = datetime.fromisoformat(query['created_at'].replace('Z', '+00:00'))
+                            time_str = created_at.strftime('%I:%M %p')
+                        except:
+                            time_str = "Recent"
+                        
+                        with st.expander(f"{time_str} - {query['question'][:30]}...", expanded=False):
+                            st.write("**Question:**")
+                            st.write(query['question'])
+                            
+                            # Only show SQL in history to admin users
+                            if st.session_state.get('is_admin', False):
+                                st.write("**SQL Query:**")
+                                st.code(query['generated_sql'], language='sql')
+                            
+                            st.write("**Result:**")
+                            if query['result_preview']:
+                                import json
+                                try:
+                                    preview_data = json.loads(query['result_preview']) if isinstance(query['result_preview'], str) else query['result_preview']
+                                    if preview_data:
+                                        import pandas as pd
+                                        df = pd.DataFrame(preview_data)
+                                        st.dataframe(df, height=200)  # Limit height
+                                except:
+                                    st.write("Preview unavailable")
+                            
+                            # Compact favorite button
+                            if st.button(f"⭐", key=f"fav_{query['id']}", help="Add to favorites"):
+                                if self.schema_editor.db_manager.toggle_query_favorite(query['id'], st.session_state.user_id):
+                                    st.success("⭐ Favorited!")
+                                    st.rerun()
+                    
+                    if len(recent_queries) > 7:
+                        st.caption(f"Showing 7 of {len(recent_queries)} recent queries")
+            else:
+                st.info("No recent questions for this connection")
         else:
-            st.info("No recent questions")
+            st.info("Select a connection to see query history")
             
         with st.expander("Schema Configuration"):
             self.schema_editor.render()

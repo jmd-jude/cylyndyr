@@ -3,6 +3,7 @@ import os
 import json
 import logging
 import streamlit as st
+import pandas as pd
 from datetime import datetime
 from typing import Optional, Dict, List, Any, Tuple
 from sqlalchemy import create_engine
@@ -13,6 +14,7 @@ import snowflake.connector
 import traceback
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
+from .models import Base, User, Connection, SchemaConfig, QueryHistory
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -536,5 +538,136 @@ class DatabaseManager:
                 }
             logger.info("Schema config not found")
             return None
+        finally:
+            session.close()
+
+    def save_query_to_history(self, user_id: str, connection_id: str, question: str, 
+                         generated_sql: str, result_df: pd.DataFrame, 
+                         execution_time_ms: int) -> Optional[str]:
+        """Save a successful query to user's history."""
+        session = self.Session()
+        try:
+            import hashlib
+            
+            # Create query hash for deduplication
+            query_hash = hashlib.md5(f"{question.lower().strip()}".encode()).hexdigest()
+            
+            # Check if this exact question was asked recently (last 24 hours)
+            from datetime import datetime, timedelta
+            recent_cutoff = datetime.utcnow() - timedelta(hours=24)
+            
+            existing = session.query(QueryHistory).filter(
+                QueryHistory.user_id == user_id,
+                QueryHistory.connection_id == connection_id,
+                QueryHistory.query_hash == query_hash,
+                QueryHistory.created_at > recent_cutoff
+            ).first()
+            
+            if existing:
+                logger.info(f"Similar query found within 24h, not duplicating: {question[:50]}...")
+                return existing.id
+            
+            # Prepare result preview (first 10 rows)
+            result_preview = None
+            if not result_df.empty:
+                preview_data = result_df.head(10).to_dict('records')
+                # Convert any problematic types for JSON storage
+                for row in preview_data:
+                    for key, value in row.items():
+                        if pd.isna(value):
+                            row[key] = None
+                        elif hasattr(value, 'item'):  # numpy types
+                            row[key] = value.item()
+                        elif hasattr(value, '__float__'):  # Decimal and similar types
+                            try:
+                                row[key] = float(value)
+                            except (ValueError, TypeError):
+                                row[key] = str(value)
+                        elif not isinstance(value, (str, int, float, bool, type(None))):
+                            row[key] = str(value)  # Convert anything else to string
+                result_preview = preview_data
+            
+            # Prepare metadata
+            result_metadata = {
+                'row_count': len(result_df),
+                'column_count': len(result_df.columns) if not result_df.empty else 0,
+                'columns': list(result_df.columns) if not result_df.empty else [],
+                'execution_time_ms': execution_time_ms
+            }
+            
+            # Create new history entry
+            query_history = QueryHistory(
+                user_id=user_id,
+                connection_id=connection_id,
+                question=question,
+                generated_sql=generated_sql,
+                result_preview=result_preview,
+                result_metadata=result_metadata,
+                query_hash=query_hash
+            )
+            
+            session.add(query_history)
+            session.commit()
+            logger.info(f"Saved query to history: {question[:50]}...")
+            return query_history.id
+            
+        except Exception as e:
+            logger.error(f"Error saving query to history: {str(e)}")
+            session.rollback()
+            return None
+        finally:
+            session.close()
+
+    def get_user_query_history(self, user_id: str, connection_id: str = None, 
+                            limit: int = 50) -> List[Dict]:
+        """Get user's query history, optionally filtered by connection."""
+        session = self.Session()
+        try:
+            query = session.query(QueryHistory).filter(QueryHistory.user_id == user_id)
+            
+            if connection_id:
+                query = query.filter(QueryHistory.connection_id == connection_id)
+            
+            # Order by most recent first
+            query = query.order_by(QueryHistory.created_at.desc()).limit(limit)
+            
+            histories = query.all()
+            return [{
+                'id': h.id,
+                'question': h.question,
+                'generated_sql': h.generated_sql,
+                'result_preview': h.result_preview,
+                'result_metadata': h.result_metadata,
+                'created_at': h.created_at.isoformat(),
+                'is_favorite': h.is_favorite,
+                'connection_id': h.connection_id
+            } for h in histories]
+            
+        except Exception as e:
+            logger.error(f"Error getting query history: {str(e)}")
+            return []
+        finally:
+            session.close()
+
+    def toggle_query_favorite(self, query_id: str, user_id: str) -> bool:
+        """Toggle favorite status of a query (security check with user_id)."""
+        session = self.Session()
+        try:
+            query_history = session.query(QueryHistory).filter(
+                QueryHistory.id == query_id,
+                QueryHistory.user_id == user_id  # Security: only user can modify their queries
+            ).first()
+            
+            if query_history:
+                query_history.is_favorite = not query_history.is_favorite
+                session.commit()
+                logger.info(f"Toggled favorite for query: {query_history.question[:30]}...")
+                return True
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error toggling query favorite: {str(e)}")
+            session.rollback()
+            return False
         finally:
             session.close()

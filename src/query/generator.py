@@ -4,6 +4,7 @@ import pandas as pd
 import yaml
 import re
 from datetime import datetime, date
+import time
 import logging
 import os
 import snowflake.connector
@@ -378,6 +379,8 @@ class QueryGenerator:
     def execute_query(self, query: str) -> pd.DataFrame:
         """Execute SQL query and return formatted results."""
         conn = None
+        start_time = time.time()
+        
         try:
             conn = self._get_snowflake_connection()
             cursor = conn.cursor()
@@ -386,8 +389,13 @@ class QueryGenerator:
             data = cursor.fetchall()
             df = pd.DataFrame(data, columns=columns)
             formatted_df = format_dataframe(df)
+            
+            # Calculate execution time
+            execution_time_ms = int((time.time() - start_time) * 1000)
+            
             # Clear last error on successful query
             self.last_error = None
+            
             # Log query execution with results
             self._log_interaction(
                 'query_execution',
@@ -396,17 +404,25 @@ class QueryGenerator:
                 column_count=len(df.columns),
                 columns=columns,
                 results_sample=formatted_df.head(5).to_dict('records'),
-                numeric_summary=formatted_df.describe().to_dict() if not df.empty else None
+                numeric_summary=formatted_df.describe().to_dict() if not df.empty else None,
+                execution_time_ms=execution_time_ms
             )
+            
+            # Save to query history if we have session context
+            self._save_to_query_history(query, formatted_df, execution_time_ms)
+            
             return formatted_df
+            
         except Exception as e:
+            execution_time_ms = int((time.time() - start_time) * 1000)
             # Store the error for context in future queries
             self.last_error = str(e)
             # Log query execution error
             self._log_interaction(
                 'query_error',
                 sql_query=query,
-                error=str(e)
+                error=str(e),
+                execution_time_ms=execution_time_ms
             )
             raise
         finally:
@@ -415,6 +431,29 @@ class QueryGenerator:
                     conn.close()
                 except Exception:
                     pass
+
+    def _save_to_query_history(self, query: str, result_df: pd.DataFrame, execution_time_ms: int):
+        """Save successful query to user's history."""
+        try:
+            # Only save if we have active session context
+            if (hasattr(st.session_state, 'user_id') and st.session_state.user_id and
+                hasattr(st.session_state, 'active_connection_id') and st.session_state.active_connection_id and
+                hasattr(st.session_state, 'current_question') and st.session_state.current_question):
+                
+                from src.database.db_manager import DatabaseManager
+                db_manager = DatabaseManager()
+                
+                db_manager.save_query_to_history(
+                    user_id=st.session_state.user_id,
+                    connection_id=st.session_state.active_connection_id,
+                    question=st.session_state.current_question,
+                    generated_sql=query,
+                    result_df=result_df,
+                    execution_time_ms=execution_time_ms
+                )
+        except Exception as e:
+            # Don't let history saving break the main query flow
+            logging.warning(f"Failed to save query to history: {str(e)}")
 
     def analyze_result(self, df: pd.DataFrame, original_question: str, config=None) -> str:
         """Generate schema-aware analysis of query results."""
@@ -548,7 +587,6 @@ class QueryGenerator:
         )
 
         return response
-
 
 # Initialize query generator
 def get_query_generator():

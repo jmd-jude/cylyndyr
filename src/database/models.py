@@ -60,6 +60,24 @@ class SchemaConfig(Base):
     user = relationship("User", back_populates="schema_configs")
     connection = relationship("Connection", back_populates="schema_configs")
 
+class QueryHistory(Base):
+    __tablename__ = 'query_history'
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey('users.id'), nullable=False)
+    connection_id = Column(String, ForeignKey('connections.id'), nullable=False)
+    question = Column(String, nullable=False)
+    generated_sql = Column(String, nullable=False)
+    result_preview = Column(JSON)  # First 10 rows as JSON
+    result_metadata = Column(JSON)  # {row_count, column_count, execution_time_ms}
+    created_at = Column(DateTime, default=datetime.utcnow)
+    is_favorite = Column(Boolean, default=False, nullable=False)
+    query_hash = Column(String)  # For deduplication
+    
+    # Relationships
+    user = relationship("User")
+    connection = relationship("Connection")
+
 def init_db(db_url):
     """Initialize the database and create all tables."""
     engine = create_engine(db_url)
