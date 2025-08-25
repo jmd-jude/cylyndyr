@@ -12,6 +12,8 @@ from sqlalchemy.exc import IntegrityError
 from .models import Base, User, Connection, SchemaConfig
 import snowflake.connector
 import traceback
+import math
+import numpy as np
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from .models import Base, User, Connection, SchemaConfig, QueryHistory, InteractionLog
@@ -24,6 +26,22 @@ logger = logging.getLogger(__name__)
 def get_database_manager():
     """Get or create DatabaseManager instance."""
     return DatabaseManager()
+
+def sanitize_for_json(obj):
+    """Recursively replace NaN/Infinity/numpy types with None or native Python types."""
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+    if isinstance(obj, (np.floating,)):
+        val = float(obj)
+        if math.isnan(val) or math.isinf(val):
+            return None
+        return val
+    if isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize_for_json(v) for v in obj]
+    return obj
 
 class DatabaseManager:
     """Database manager class."""
@@ -673,17 +691,20 @@ class DatabaseManager:
             session.close()
 
     def save_interaction_log(self, user_id: str, connection_id: str, thread_id: str, 
-                        interaction_type: str, database_name: str, payload: dict) -> bool:
+                         interaction_type: str, database_name: str, payload: dict) -> bool:
         """Save interaction log to Supabase for analytics."""
         session = self.Session()
         try:
+            # Sanitize payload before saving
+            safe_payload = sanitize_for_json(payload)
+
             interaction_log = InteractionLog(
                 user_id=user_id,
                 connection_id=connection_id,
                 thread_id=thread_id,
                 interaction_type=interaction_type,
                 database_name=database_name,
-                payload=payload
+                payload=safe_payload
             )
             
             session.add(interaction_log)
